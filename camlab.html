@@ -1,0 +1,2029 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Camera Lab by ICWT — how a camera turns light into a photograph</title>
+<meta name="description" content="Camera Lab by ICWT: an interactive camera simulator. Focal length, aperture, shutter, ISO, focus, depth of field, motion blur and sensor noise computed live from one scene model.">
+<meta name="application-name" content="Camera Lab">
+<meta name="theme-color" content="#f0ede5">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cmask id='a'%3E%3Ccircle cx='16' cy='16' r='12.4' fill='%23fff'/%3E%3Cpath d='M16.00 10.40 L20.38 12.51 L21.46 17.25 L18.43 21.05 L13.57 21.05 L10.54 17.25 L11.62 12.51 Z'/%3E%3Cpath d='M16.00 10.40 Q22.70 7.17 26.98 8.31 M20.38 12.51 Q27.08 15.74 28.85 19.79 M21.46 17.25 Q23.12 24.50 21.05 28.41 M18.43 21.05 Q13.79 26.86 9.45 27.69 M13.57 21.05 Q6.13 21.05 2.78 18.16 M10.54 17.25 Q5.90 11.43 6.06 7.01 M11.62 12.51 Q13.28 5.25 16.83 2.63' fill='none' stroke='%23000' stroke-width='0.85' stroke-linecap='round'/%3E%3C/mask%3E%3Ccircle cx='16' cy='16' r='15' fill='none' stroke='%23a86b16' stroke-width='1.3'/%3E%3Ccircle cx='16' cy='16' r='12.4' fill='%23a86b16' mask='url%28%23a%29'/%3E%3C/svg%3E">
+<style>
+/* =====================================================================
+   CAMERA LAB by ICWT — design system (desktop)
+   Warm cream panels, dark ink, amber accent, camera-style housing.
+   tokens → shell → viewer → transport → mechanism → controls → hint → gallery
+   ===================================================================== */
+:root {
+  --bg: #e8e5dd;
+  --panel: #f8f6f1;
+  --panel-2: #f1eee7;
+  --panel-3: #e7e2d8;
+  --line: #d5cfc4;
+  --line-2: #b9b1a3;
+  --ink: #20221f;
+  --ink-2: #4b4e49;
+  --muted: #6e726c;
+  --accent: #a86b16;
+  --accent-soft: #c08d3e;
+  --accent-tint: #f2e5ca;
+  --accent-ink: #fffaf0;
+  --ok: #287a45;
+  --over: #c15d24;
+  --under: #416cb6;
+  --danger: #bb4039;
+  --r: 12px;
+  --shadow: 0 14px 40px rgba(58, 49, 35, .14);
+  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --right-w: 380px;
+  /* The housing is as wide as the column allows, but never so wide that the photograph, the camera
+     information and the shutter no longer fit in the window height (3:2 photo + ~250 px of chrome). */
+  --stage-max: calc((100dvh - 250px) * 1.5 + 22px);
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: radial-gradient(1100px 520px at 50% -16%, #f5f1e8 0%, transparent 72%), var(--bg);
+  color: var(--ink); font: 14px/1.45 var(--sans); -webkit-font-smoothing: antialiased; overflow: hidden;
+}
+button, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+button:disabled { opacity: .42; cursor: not-allowed; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 5px; }
+h2, h3, p { margin: 0; }
+.eyebrow { font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.value { font: 700 13px var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.value.over { color: var(--over); } .value.under { color: var(--under); }
+
+/* ---- Shell: top bar + two columns ---------------------------------------- */
+.app { display: grid; grid-template-rows: 56px minmax(0, 1fr); height: 100dvh; }
+.topbar { display: flex; align-items: center; justify-content: space-between; padding: 0 18px; background: linear-gradient(180deg, #fbf9f4, #f0ede5); border-bottom: 1px solid var(--line); }
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand-mark { width: 30px; height: 30px; color: var(--accent); flex: none; }
+.brand-type { display: flex; flex-direction: column; line-height: 1.1; }
+.brand-type strong { font-size: 14px; letter-spacing: .19em; font-weight: 700; text-transform: uppercase; }
+.brand-type span { font-size: 11px; letter-spacing: .04em; color: var(--muted); margin-top: 3px; }
+.pill { font: 600 11px/1 var(--mono); letter-spacing: .06em; padding: 7px 10px; border: 1px solid var(--line-2); border-radius: 999px; background: var(--panel-2); color: var(--muted); }
+.workspace { display: grid; grid-template-columns: minmax(0, 1fr) var(--right-w); min-height: 0; }
+.stage-col { min-width: 0; overflow-y: auto; padding: 12px 16px; display: flex; flex-direction: column; gap: 12px; }
+.stage-col > * { width: 100%; max-width: var(--stage-max); margin-inline: auto; }
+.rail { min-height: 0; overflow-y: auto; background: var(--panel); border-left: 1px solid var(--line); padding: 12px 12px 14px; scrollbar-width: thin; }
+
+/* ---- Shared buttons ------------------------------------------------------ */
+.btn { background: var(--panel-3); border: 1px solid var(--line-2); border-radius: 8px; padding: 7px 11px; font-size: 12px; white-space: nowrap; }
+.btn:hover:not(:disabled) { background: #ded8cd; border-color: #9b9385; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; }
+.btn.primary:hover:not(:disabled) { background: #935c12; }
+.btn.ghost { background: transparent; }
+.btn.danger:hover:not(:disabled) { border-color: var(--danger); color: var(--danger); }
+.btn.small { padding: 5px 9px; font-size: 11.5px; }
+.icon-btn { background: transparent; border: 0; color: var(--muted); padding: 2px 6px; font-size: 14px; border-radius: 6px; }
+.icon-btn:hover { color: var(--ink); background: var(--panel-3); }
+.btn-row { display: flex; gap: 6px; }
+
+/* ---- Viewer: the camera-style housing ------------------------------------ */
+.viewer { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 10px; box-shadow: var(--shadow); }
+.screen { position: relative; width: 100%; aspect-ratio: 3 / 2; background: #10110f; border-radius: 10px; overflow: hidden; border: 1px solid #33362f; }
+.screen canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+#vfCanvas { cursor: crosshair; }
+/* Overlays below are HTML on top of the canvas: never part of a captured photograph. */
+.frame-corner { position: absolute; width: 22px; height: 22px; opacity: .7; pointer-events: none; filter: drop-shadow(0 0 1px rgba(0,0,0,.45)); border: 0 solid var(--accent); }
+.frame-corner.tl { top: 9px; left: 9px; border-top-width: 1px; border-left-width: 1px; }
+.frame-corner.tr { top: 9px; right: 9px; border-top-width: 1px; border-right-width: 1px; }
+.frame-corner.bl { bottom: 9px; left: 9px; border-bottom-width: 1px; border-left-width: 1px; }
+.frame-corner.br { bottom: 9px; right: 9px; border-bottom-width: 1px; border-right-width: 1px; }
+.rec-dot { position: absolute; top: 15px; left: 15px; width: 8px; height: 8px; border-radius: 50%; background: #e2554b; box-shadow: 0 0 0 3px rgba(226,85,75,.25); animation: pulse 2s ease-in-out infinite; pointer-events: none; }
+@keyframes pulse { 50% { box-shadow: 0 0 0 6px rgba(226,85,75,.04); opacity: .55; } }
+.flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
+.flash.go { animation: flash .3s ease-out; }
+@keyframes flash { 0% { opacity: .85; } 100% { opacity: 0; } }
+.view-tabs { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); display: flex; gap: 2px; padding: 3px; border-radius: 999px; background: rgba(24,24,21,.72); border: 1px solid rgba(255,255,255,.14); backdrop-filter: blur(6px); }
+.view-tabs button { background: transparent; border: 0; border-radius: 999px; padding: 5px 12px; font-size: 10.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: #c5c4bc; }
+.view-tabs button[aria-selected="true"] { background: rgba(255,255,255,.16); color: #fff; }
+.what { position: absolute; top: 38px; left: 14px; max-width: min(320px, 45%); padding: 8px 10px 9px; font-size: 12px; line-height: 1.45; background: rgba(248,246,241,.94); border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 8px; box-shadow: 0 6px 18px rgba(0,0,0,.18); }
+.what { pointer-events: none; } .what button { pointer-events: auto; }   /* clicks pass through to focus, except the close button */
+.what-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 3px; }
+
+/* Camera information (below the photograph) and the scene-map read-out that replaces it */
+.cam-info, .editor-bar { margin-top: 8px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 7px 14px; }
+.cam-info { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+.cam-info .value { display: block; font-size: 15px; }
+.editor-bar { font-size: 11.5px; color: var(--ink-2); }
+.editor-bar b { color: var(--ink); }
+
+/* Transport: shutter centred on the housing by a symmetric 1fr | auto | 1fr grid */
+.transport { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 14px; padding: 12px 4px 2px; }
+.tp-left { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; }
+.tp-right { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.stat strong { display: block; font: 600 11.5px/1.3 var(--mono); }
+.ab { display: flex; flex-direction: column; gap: 5px; flex: none; }
+.ab .btn-row .btn { flex: 1; }
+.shutter {
+  width: 64px; height: 64px; border-radius: 50%; border: 3px solid #7e776b;
+  background: radial-gradient(circle at 50% 36%, #fffdf7, #d7d1c4);
+  box-shadow: 0 0 0 5px var(--panel-3), 0 0 0 6px #a69e90, 0 6px 16px rgba(45,35,20,.2);
+}
+.shutter:hover { background: radial-gradient(circle at 50% 36%, #fff, #e4ded1); }
+.shutter:active { transform: scale(.94); }
+/* Gallery and Reset scene share one size */
+.tp-right .btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 40px; width: 132px; }
+.gallery-btn .thumb { width: 36px; height: 24px; border-radius: 4px; background: var(--panel-2) center / cover no-repeat; border: 1px solid var(--line-2); }
+.count { font: 700 10px/1 var(--mono); background: var(--accent); color: var(--accent-ink); border-radius: 999px; padding: 3px 6px; }
+
+/* ---- Inside the camera ---------------------------------------------------- */
+.mechanism { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); }
+.mechanism > summary { display: flex; align-items: baseline; gap: 9px; padding: 12px 14px; cursor: pointer; list-style: none; font-weight: 600; font-size: 12.5px; }
+.mechanism > summary::-webkit-details-marker { display: none; }
+.mechanism > summary small { color: var(--muted); font-weight: 400; font-size: 11px; }
+.chevron { color: var(--accent); transition: transform .2s; }
+.mechanism[open] .chevron { transform: rotate(90deg); }
+#mechCanvas { display: block; width: calc(100% - 28px); margin: 0 14px 14px; aspect-ratio: 1000 / 300; border: 1px solid var(--line); border-radius: 8px; }
+
+/* ---- Right column: experiments + camera controls ------------------------ */
+.rail h2 { margin: 2px 4px 8px; }
+.deck + h2 { margin-top: 14px; }
+.rig-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 14px; }
+.rig-grid button { padding: 7px 9px; border-radius: 7px; border: 1px solid var(--line-2); background: var(--panel-2); font-size: 11.5px; text-align: left; line-height: 1.25; }
+.rig-grid button:hover { border-color: #8e8678; }
+.rig-grid button.active { border-color: var(--accent); background: var(--accent-tint); }
+.rig-grid small { display: block; color: var(--muted); font-size: 10px; margin-top: 2px; }
+.deck { display: flex; flex-direction: column; gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
+.ctl { background: var(--panel-2); padding: 8px 14px 5px; }
+.ctl:hover, .ctl:focus-within { background: #f5efe2; }
+.ctl-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 1px; font-size: 12px; font-weight: 600; color: var(--ink-2); }
+input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 22px; background: transparent; margin: 0; }
+input[type=range]::-webkit-slider-runnable-track { height: 4px; border-radius: 3px; background: linear-gradient(90deg, var(--accent) var(--fill, 0%), var(--line-2) var(--fill, 0%)); }
+input[type=range]::-moz-range-track { height: 4px; border-radius: 3px; background: var(--line-2); }
+input[type=range]::-moz-range-progress { height: 4px; border-radius: 3px; background: var(--accent); }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 15px; height: 15px; margin-top: -5.5px; border-radius: 50%; background: #fffdf8; border: 2px solid var(--panel); box-shadow: 0 0 0 1px #8a8378; }
+input[type=range]::-moz-range-thumb { width: 13px; height: 13px; border-radius: 50%; background: #fffdf8; border: 2px solid var(--panel); box-shadow: 0 0 0 1px #8a8378; }
+/* Read-only exposure meter: −3 … +3 EV, the zero tick is the target */
+.meter { position: relative; height: 28px; margin: 2px 6px 0; }
+.meter::before { content: ""; position: absolute; left: 0; right: 0; top: 11px; height: 2px; background: var(--line-2); }
+.meter i { position: absolute; top: 7px; width: 1px; height: 10px; background: #8f887c; }
+.meter i.zero { top: 5px; width: 2px; height: 13px; background: var(--ink); }
+.meter span { position: absolute; top: 19px; transform: translateX(-50%); font: 9px var(--mono); color: var(--muted); }
+.meter b { position: absolute; top: 4px; width: 4px; height: 14px; border-radius: 2px; background: var(--ok); transform: translateX(-50%); box-shadow: 0 0 0 2px var(--panel-2); transition: left .12s linear; }
+.meter b.over { background: var(--over); } .meter b.under { background: var(--under); }
+.meter-text { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+/* One shared guidance panel, placed beside the hovered control (position: fixed, so never clipped) */
+.hint { position: fixed; z-index: 30; width: 260px; padding: 10px 12px; font-size: 12px; line-height: 1.5; color: var(--ink-2); background: var(--panel); border: 1px solid var(--line-2); border-left: 3px solid var(--accent); border-radius: 9px; box-shadow: var(--shadow); pointer-events: none; }
+.hint b { display: block; color: var(--ink); margin-bottom: 3px; }
+.hint figure { display: flex; align-items: center; gap: 10px; margin: 8px 0 0; font-size: 11px; color: var(--muted); }
+.hint canvas { width: 64px; height: 64px; flex: none; }
+
+/* ---- Gallery drawer and confirm dialog ----------------------------------- */
+.overlay { position: fixed; inset: 0; z-index: 40; display: flex; justify-content: flex-end; background: rgba(32, 28, 22, .44); backdrop-filter: blur(4px); }
+.overlay.center { justify-content: center; align-items: center; }
+.drawer { width: min(1000px, 100%); height: 100%; display: flex; flex-direction: column; background: var(--panel); box-shadow: var(--shadow); }
+.drawer-head { display: flex; align-items: center; gap: 9px; padding: 14px 18px; border-bottom: 1px solid var(--line); background: var(--panel-2); }
+.drawer-head h2 { font-size: 15px; margin-right: auto; }
+.drawer-body { flex: 1; min-height: 0; overflow-y: auto; padding: 16px 18px 28px; }
+.gal-note { color: var(--muted); font-size: 11.5px; margin-bottom: 12px; }
+.thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.thumb-card { position: relative; padding: 0; border: 1px solid var(--line-2); border-radius: 9px; overflow: hidden; background: var(--panel-2); text-align: left; }
+.thumb-card.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.thumb-card img, .cmp-imgs img { display: block; width: 100%; aspect-ratio: 3/2; object-fit: cover; background: #ddd8ce; }
+.thumb-card .cap { padding: 6px 8px; font: 10.5px var(--mono); color: var(--ink-2); }
+.ab-mark { position: absolute; top: 6px; left: 6px; background: var(--accent); color: var(--accent-ink); font: 800 10px var(--mono); border-radius: 4px; padding: 2px 6px; }
+.preview { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(220px, 1fr); gap: 16px; margin-bottom: 20px; }
+.preview img { width: 100%; border-radius: 9px; border: 1px solid var(--line); }
+.preview .btn-row { margin-top: 10px; }
+.meta-table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+.meta-table th, .meta-table td { text-align: left; padding: 5px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.meta-table th { color: var(--muted); font-weight: 500; }
+.meta-table td { font-family: var(--mono); }
+.meta-table tr.diff td { color: var(--accent); }
+.meta-table tr.diff td:first-child::before { content: "≠ "; }
+.compare-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 9px; font-size: 12.5px; }
+.cmp-imgs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+.cmp-imgs figure { margin: 0; }
+.cmp-imgs img { border: 1px solid var(--line); border-radius: 8px; }
+.cmp-imgs figcaption { font: 11px var(--mono); color: var(--ink-2); margin-top: 5px; }
+.interp { background: var(--panel-2); border: 1px solid var(--line); border-radius: 9px; padding: 11px 13px; font-size: 12px; margin: 12px 0 18px; }
+.interp ul { margin: 5px 0 0; padding-left: 18px; }
+.interp .scene-warn { color: #8c4a12; }
+.dialog { width: min(420px, 100%); background: var(--panel); border: 1px solid var(--line-2); border-radius: 14px; box-shadow: var(--shadow); overflow: hidden; }
+.dialog p { color: var(--ink-2); font-size: 12.5px; }
+.dialog .btn-row { justify-content: flex-end; margin-top: 14px; }
+.toast { position: fixed; bottom: 20px; left: 50%; transform: translate(-50%, 16px); background: var(--panel); border: 1px solid var(--line-2); padding: 9px 14px; border-radius: 10px; font-size: 12px; opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 60; box-shadow: var(--shadow); }
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+@media (max-width: 1366px) { :root { --right-w: 360px; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ================= TOP BAR: branding and frame rate ================= -->
+  <header class="topbar">
+    <div class="brand">
+      <!-- Logo: a seven-blade aperture with a wide-open centre -->
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+        <mask id="apLogo"><circle cx="16" cy="16" r="12.4" fill="#fff"/><path d="M16 10.4 L20.38 12.51 L21.46 17.25 L18.43 21.05 L13.57 21.05 L10.54 17.25 L11.62 12.51 Z"/><path d="M16 10.4 Q22.7 7.17 26.98 8.31 M20.38 12.51 Q27.08 15.74 28.85 19.79 M21.46 17.25 Q23.12 24.5 21.05 28.41 M18.43 21.05 Q13.79 26.86 9.45 27.69 M13.57 21.05 Q6.13 21.05 2.78 18.16 M10.54 17.25 Q5.9 11.43 6.06 7.01 M11.62 12.51 Q13.28 5.25 16.83 2.63" fill="none" stroke="#000" stroke-width=".85" stroke-linecap="round"/></mask>
+        <circle cx="16" cy="16" r="15" fill="none" stroke="currentColor" stroke-width="1.3"/>
+        <circle cx="16" cy="16" r="12.4" fill="currentColor" mask="url(#apLogo)"/>
+      </svg>
+      <div class="brand-type"><strong>Camera Lab</strong><span>by ICWT</span></div>
+    </div>
+    <span class="pill" id="fpsPill" title="Viewfinder frame rate">— fps</span>
+  </header>
+
+  <div class="workspace">
+
+    <!-- ================= LEFT: camera housing, viewfinder and mechanism ================= -->
+    <main class="stage-col">
+      <section class="viewer" aria-label="Camera">
+        <div class="screen" id="stage">
+          <canvas id="vfCanvas" tabindex="0" role="img" aria-label="Live view. Click anything to focus at its distance. Press Space to take a photograph."></canvas>
+          <canvas id="edCanvas" hidden role="img" aria-label="Top-down scene map. Drag the car, the person or the sunflower to move them."></canvas>
+          <div class="frame-corner tl"></div><div class="frame-corner tr"></div>
+          <div class="frame-corner bl"></div><div class="frame-corner br"></div>
+          <i class="rec-dot" id="recDot"></i>
+          <div class="flash" id="flash"></div>
+          <div class="view-tabs" role="tablist" aria-label="View">
+            <button role="tab" id="tabVF" aria-selected="true" aria-controls="vfCanvas">Live view</button>
+            <button role="tab" id="tabED" aria-selected="false" aria-controls="edCanvas">Scene map</button>
+          </div>
+          <div class="what" id="whatPopup" role="status" hidden>
+            <div class="what-head"><span class="eyebrow">What just happened?</span><button class="icon-btn" id="whatClose" aria-label="Dismiss">×</button></div>
+            <div id="whatText"></div>
+          </div>
+        </div>
+
+        <!-- Camera information: HTML only, never part of a photograph -->
+        <section class="cam-info" id="camInfo" aria-label="Camera information">
+          <div><span class="eyebrow">Focal</span><b class="value" id="ciFocal"></b></div>
+          <div><span class="eyebrow">Aperture</span><b class="value" id="ciAp"></b></div>
+          <div><span class="eyebrow">Shutter</span><b class="value" id="ciSh"></b></div>
+          <div><span class="eyebrow">ISO</span><b class="value" id="ciIso"></b></div>
+          <div><span class="eyebrow">Focus</span><b class="value" id="ciFocus"></b></div>
+          <div><span class="eyebrow">Exposure</span><b class="value" id="ciEv"></b></div>
+        </section>
+        <p class="editor-bar" id="editorPanel" hidden></p>
+
+        <!-- Transport: [motion · A/B]  [shutter]  [gallery · reset] -->
+        <div class="transport">
+          <div class="tp-left">
+            <div class="stat"><span class="eyebrow">Motion</span><strong id="sbMotion">—</strong></div>
+            <div class="ab">
+              <div class="btn-row">
+                <button class="btn small" id="shootA" title="Take a photo and mark it as comparison A">Shoot A</button>
+                <button class="btn small" id="shootB" title="Take a photo and mark it as comparison B">Shoot B</button>
+              </div>
+              <button class="btn small" id="compareAB" title="Shoot A, change one setting, Shoot B, then compare" disabled>Compare A / B</button>
+            </div>
+          </div>
+          <button class="shutter" id="shutterBtn" aria-label="Shutter release — take a photograph" title="Take photograph (Space)"></button>
+          <div class="tp-right">
+            <button class="btn gallery-btn" id="galleryBtn" aria-label="Open photo gallery"><span class="thumb" id="galThumb"></span>Gallery <span class="count" id="galCount">0</span></button>
+            <button class="btn ghost" id="resetScene" title="Restore the default scene and camera">Reset scene</button>
+          </div>
+        </div>
+      </section>
+
+      <details class="mechanism" id="insideCam" open>
+        <summary><span class="chevron">▸</span> Inside the Camera <small>live schematic, driven by the same numbers as the viewfinder — not to scale</small></summary>
+        <canvas id="mechCanvas" role="img" aria-label="Schematic of scene, lens, aperture, shutter, sensor, ISO gain and image"></canvas>
+      </details>
+    </main>
+
+    <!-- ================= RIGHT: point & shoot set-ups, camera controls, environment ================= -->
+    <aside class="rail" aria-label="Point and shoot, camera controls and environment">
+      <h2 class="eyebrow">Point &amp; Shoot</h2>
+      <div class="rig-grid" id="presetGrid" data-hint="experiments"></div>
+
+      <h2 class="eyebrow">Camera controls</h2>
+      <div class="deck">
+        <div class="ctl" data-hint="focal"><div class="ctl-head"><label for="focal">Lens &amp; focal length</label><b class="value" id="focalVal"></b></div><input type="range" id="focal" min="18" max="135" step="1"></div>
+        <div class="ctl" data-hint="aperture"><div class="ctl-head"><label for="aperture">Aperture</label><b class="value" id="apVal"></b></div><input type="range" id="aperture" min="0" step="1"></div>
+        <div class="ctl" data-hint="shutter"><div class="ctl-head"><label for="shutter">Shutter speed</label><b class="value" id="shVal"></b></div><input type="range" id="shutter" min="0" step="1"></div>
+        <div class="ctl" data-hint="iso"><div class="ctl-head"><label for="iso">ISO</label><b class="value" id="isoVal"></b></div><input type="range" id="iso" min="0" step="1"></div>
+        <div class="ctl" data-hint="meter" tabindex="0" aria-label="Exposure meter"><div class="ctl-head"><span>Exposure meter</span><b class="value" id="meterVal"></b></div><div class="meter" id="meter" aria-hidden="true"></div><span class="meter-text" id="meterText"></span></div>
+        <div class="ctl" data-hint="focus"><div class="ctl-head"><label for="focusDist">Focus distance</label><b class="value" id="focusVal"></b></div><input type="range" id="focusDist" min="0" max="1000" step="1"></div>
+      </div>
+
+      <h2 class="eyebrow">Environment</h2>
+      <div class="deck">
+        <div class="ctl" data-hint="sun"><div class="ctl-head"><label for="sun">Environment brightness</label><b class="value" id="sunVal"></b></div><input type="range" id="sun" min="0" max="100" step="1"></div>
+        <div class="ctl" data-hint="speed"><div class="ctl-head"><label for="carSpeed">Car speed</label><b class="value" id="carSpeedVal"></b></div><input type="range" id="carSpeed" min="0" max="120" step="5"></div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<div class="hint" id="hint" role="tooltip" hidden></div>
+
+<!-- ================= GALLERY DRAWER (photos are kept for this session only) ================= -->
+<div class="overlay" id="galleryOverlay" hidden>
+  <div class="drawer" role="dialog" aria-modal="true" aria-labelledby="galTitle">
+    <div class="drawer-head">
+      <h2 id="galTitle">Photo gallery</h2>
+      <button class="btn small ghost" id="galClear">Clear all</button>
+      <button class="icon-btn" id="galClose" aria-label="Close gallery">✕</button>
+    </div>
+    <div class="drawer-body">
+      <p class="gal-note" id="galNote"></p>
+      <div id="compareView" hidden>
+        <div class="compare-head"><b>Side-by-side comparison</b><button class="btn small" id="cmpClose">Close comparison</button></div>
+        <div class="cmp-imgs" id="cmpImgs"></div>
+        <table class="meta-table" id="cmpTable"></table>
+        <div class="interp" id="cmpInterp"></div>
+      </div>
+      <div class="preview" id="preview" hidden>
+        <img id="prevImg" alt="Selected photograph">
+        <div>
+          <table class="meta-table" id="prevMeta"></table>
+          <div class="btn-row">
+            <button class="btn small primary" id="prevDownload">Download PNG</button>
+            <button class="btn small danger" id="prevDelete">Delete</button>
+          </div>
+        </div>
+      </div>
+      <div class="thumbs" id="thumbs"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= CONFIRM ================= -->
+<div class="overlay center" id="confirmOverlay" hidden>
+  <div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="confirmTitle" aria-describedby="confirmText">
+    <div class="drawer-head"><h2 id="confirmTitle">Are you sure?</h2></div>
+    <div class="drawer-body"><p id="confirmText"></p><div class="btn-row"><button class="btn" id="confirmNo">Cancel</button><button class="btn primary" id="confirmYes">Delete</button></div></div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+'use strict';
+/* =====================================================================
+   CAMERA LAB — SIMULATION CORE
+   ---------------------------------------------------------------------
+   Units used everywhere in this file:
+     • world distances  : metres
+     • lens & sensor     : millimetres
+     • time              : seconds
+     • image positions   : render pixels (internal photograph, not CSS px)
+   World coordinate system (right-handed, camera-centred):
+     X → right, Y → up (ground is Y = 0), Z → away from the camera.
+     The camera sits at (0, CAMERA_HEIGHT, 0) and looks along +Z. It never moves.
+   ===================================================================== */
+
+/* ---------------- 1. Small utilities ---------------- */
+const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
+const lerp = (a, b, t) => a + (b - a) * t;
+const log2 = Math.log2;
+const DEG = Math.PI / 180;
+
+/** Deterministic pseudo-random generator (mulberry32) so the scenery is identical on every load. */
+function makeRng(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+/* Colour helpers: colours are [r,g,b] arrays in 0..255 sRGB. */
+/* Scene colours are capped at 250: the value 255 is reserved as an HDR marker for the sun's disc. */
+function rgb(c, a) {
+  const r = Math.min(250, c[0] | 0), g = Math.min(250, c[1] | 0), b = Math.min(250, c[2] | 0);
+  return a === undefined ? `rgb(${r},${g},${b})` : `rgba(${r},${g},${b},${a})`;
+}
+function hex(h) { const n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+function mix(a, b, t) { return [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)]; }
+/** Scale an sRGB colour by a factor in *linear light* (physically meaningful brightness change). */
+function shade(c, f) {
+  const o = [0, 0, 0];
+  for (let i = 0; i < 3; i++) {
+    const lin = srgbToLinear(c[i] / 255) * f;
+    o[i] = clamp(Math.round(linearToSrgb(Math.min(lin, 1)) * 250), 0, 250); // 250 cap: 255 is reserved for the HDR sun marker
+  }
+  return o;
+}
+function srgbToLinear(v) { return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }
+function linearToSrgb(v) { return v <= 0.0031308 ? v * 12.92 : 1.055 * Math.pow(v, 1 / 2.4) - 0.055; }
+
+/* ---------------- 2. Camera constants & setting scales ---------------- */
+const SENSOR = { widthMm: 36, heightMm: 24 };       // full-frame sensor
+const CAMERA_HEIGHT = 1.6;                           // metres above ground
+/* Sensor shift: the optical axis still points along +Z, but the active sensor area is
+   shifted downwards (like a shift lens) so the horizon sits at 42 % of the frame height
+   instead of 50 %. This keeps the projection a pure perspective projection. */
+const PRINCIPAL_Y = 0.42;
+const NEAR_PLANE = 0.3;                              // metres — geometry closer than this is clipped
+const MIN_FOCUS = 0.5;                               // closest focus distance (m)
+const INFINITY_FOCUS = 1000;                         // treated as ∞ in the focus slider
+const COC_CRITERION_MM = 0.03;                       // "acceptably sharp" blur for the DoF read-out
+const BLUR_EDGE_MATCH = 2.5;                         // Gaussian σ = blur-disc diameter ÷ 2.5 (edge-width match)
+
+/* One-third-stop scales, like a real camera. Nominal marked values are used in the maths. */
+const APERTURES = [1.4, 1.6, 1.8, 2, 2.2, 2.5, 2.8, 3.2, 3.5, 4, 4.5, 5, 5.6, 6.3, 7.1, 8, 9, 10, 11, 13, 14, 16, 18, 20, 22];
+const SHUTTERS = [
+  ['1/2000', 1 / 2000], ['1/1600', 1 / 1600], ['1/1250', 1 / 1250], ['1/1000', 1 / 1000], ['1/800', 1 / 800], ['1/640', 1 / 640],
+  ['1/500', 1 / 500], ['1/400', 1 / 400], ['1/320', 1 / 320], ['1/250', 1 / 250], ['1/200', 1 / 200], ['1/160', 1 / 160],
+  ['1/125', 1 / 125], ['1/100', 1 / 100], ['1/80', 1 / 80], ['1/60', 1 / 60], ['1/50', 1 / 50], ['1/40', 1 / 40],
+  ['1/30', 1 / 30], ['1/25', 1 / 25], ['1/20', 1 / 20], ['1/15', 1 / 15], ['1/13', 1 / 13], ['1/10', 1 / 10],
+  ['1/8', 1 / 8], ['1/6', 1 / 6], ['1/5', 1 / 5], ['1/4', 1 / 4], ['0.3', 0.3], ['0.4', 0.4], ['1/2', 1 / 2],
+  ['0.6', 0.6], ['0.8', 0.8], ['1', 1]
+].map(([label, t]) => ({ label, t }));
+const ISOS = [100, 125, 160, 200, 250, 320, 400, 500, 640, 800, 1000, 1250, 1600, 2000, 2500, 3200, 4000, 5000, 6400];
+
+function shutterLabel(t) {
+  const s = SHUTTERS.find(x => Math.abs(x.t - t) < 1e-9);
+  if (s) return s.label.includes('/') || s.label === '1' ? s.label + ' s' : s.label + ' s';
+  return t >= 0.3 ? t.toFixed(1) + ' s' : '1/' + Math.round(1 / t) + ' s';
+}
+function apertureLabel(N) { return 'f/' + (N < 10 ? (Number.isInteger(N) ? N : N.toFixed(1)) : Math.round(N)); }
+function fmtEV(v, digits = 1) { const r = Number(v.toFixed(digits)); return r === 0 ? '±' + (0).toFixed(digits) : (r > 0 ? '+' : '−') + Math.abs(r).toFixed(digits); }
+function fmtDist(m) { if (!isFinite(m) || m >= INFINITY_FOCUS * 0.999) return '∞'; return m < 10 ? m.toFixed(2) + ' m' : m < 100 ? m.toFixed(1) + ' m' : Math.round(m) + ' m'; }
+
+/* =====================================================================
+   3. OPTICS — focal length, projection scale, thin lens, depth of field
+   ===================================================================== */
+const Optics = {
+  /** Horizontal angle of view (radians).  Model: pinhole/thin lens focused at infinity.
+      Input: focal length (mm). Output: angle. Approximation: ignores focus breathing. */
+  horizontalFov(fMm) { return 2 * Math.atan(SENSOR.widthMm / (2 * fMm)); },
+
+  /** Focal length expressed in image pixels: f_px = f_mm × imageWidth_px ÷ sensorWidth_mm.
+      Pixels are square because the render target has the sensor's 3:2 aspect ratio. */
+  focalPixels(fMm, imageWidthPx) { return fMm * imageWidthPx / SENSOR.widthMm; },
+
+  /** Entrance-pupil diameter D = f / N (mm). A ratio model, not the iris's physical size. */
+  apertureDiameter(fMm, N) { return fMm / N; },
+
+  /** Thin-lens image distance v = f·z / (z − f), all in mm.  z = ∞ gives v = f.
+      Objects at or inside the focal length cannot form a real image, so z is clamped. */
+  imageDistance(fMm, zMm) {
+    if (!isFinite(zMm)) return fMm;
+    const z = Math.max(zMm, fMm * 1.001 + 1);
+    return fMm * z / (z - fMm);
+  },
+
+  /** Circle-of-confusion diameter on the sensor (mm) for an object at zM metres when the lens
+      is focused at sM metres.  Similar triangles of the light cone through the pupil:
+        CoC = D · |v(z) − v(s)| / v(z)
+      Output → 0 when z = s (the ideal thin lens images that plane perfectly). */
+  cocMm(fMm, N, zM, sM) {
+    const D = this.apertureDiameter(fMm, N);
+    const vz = this.imageDistance(fMm, zM * 1000);
+    const vs = this.imageDistance(fMm, sM * 1000);
+    return D * Math.abs(vz - vs) / vz;
+  },
+  /** Convert a sensor-plane length (mm) to render pixels. */
+  mmToPixels(mm, imageWidthPx) { return mm * imageWidthPx / SENSOR.widthMm; },
+
+  /** Map a physical blur-disc diameter d (px) to the Gaussian σ used by the canvas blur filter.
+      A real defocused point is a hard-edged disc; a Gaussian with σ ≈ d/2.5 has the same visible
+      edge width (a disc's 10–90 % edge spans ≈ 2.56 σ). No extra emphasis: the rendered blur is
+      exactly what the computed circle of confusion predicts. */
+  blurSigmaFromCoc(cocPx) { return cocPx / BLUR_EDGE_MATCH; },
+
+  /** Depth-of-field limits using the standard hyperfocal formulas (c = acceptable CoC). */
+  dofLimits(fMm, N, sM, c = COC_CRITERION_MM) {
+    const H = fMm * fMm / (N * c) + fMm;    // hyperfocal distance (mm)
+    const s = sM * 1000;
+    const near = s * (H - fMm) / (H + s - 2 * fMm);
+    const far = s >= H ? Infinity : s * (H - fMm) / (H - s);
+    return { nearM: near / 1000, farM: far / 1000, hyperfocalM: H / 1000 };
+  },
+
+  /** Motion streak length (px) = image-space speed × exposure time. */
+  motionStreakPx(velocityPxPerSecond, shutterSeconds) { return Math.abs(velocityPxPerSecond) * shutterSeconds; },
+
+  /** Image-space speed (px/s) of an object moving sideways at v m/s at depth Z. */
+  imageSpeedPx(speedMs, zM, fMm, imageWidthPx) { return this.focalPixels(fMm, imageWidthPx) * speedMs / zM; }
+};
+
+/* =====================================================================
+   4. EXPOSURE — EV arithmetic (manual exposure: you set N, t and ISO)
+   ---------------------------------------------------------------------
+   Simplified incident-light model, ISO-100 referenced:
+     cameraEV100 = log2( N²/t × 100/ISO )
+     sceneEV100  = from the lighting model (bright sun ≈ 15)
+     difference  = sceneEV100 − cameraEV100   (stops; + = brighter than a correct exposure)
+     image gain  = 2^difference
+   The ISO-independent part log2(N²/t) measures how much LIGHT reaches the sensor;
+   ISO only appears as a gain on the recorded signal.
+   ===================================================================== */
+const Exposure = {
+  SUNNY_EV100: 15,
+  cameraEV100(N, t, ISO) { return log2((N * N / t) * (100 / ISO)); },
+  /** Light admitted by aperture+shutter only (ISO-independent). */
+  lightEV(N, t) { return log2(N * N / t); },
+  gain(diffStops) { return Math.pow(2, diffStops); },
+  /** Photons collected relative to a correct ISO-100 exposure (stops). ISO does not appear. */
+  photonStops(sceneEV100, N, t) { return sceneEV100 - this.lightEV(N, t); }
+};
+
+/* =====================================================================
+   5. SENSOR MODEL (noise) — simplified, documented
+   ---------------------------------------------------------------------
+   electrons  e = linearSceneValue × 2^photonStops × FULL_WELL_REF
+   noise (e⁻) = √(e + READ_NOISE²)        (photon shot noise + read noise)
+   output     = e / FULL_WELL_REF × ISO/100 (the ISO gain multiplies signal AND noise)
+   FULL_WELL_REF is chosen so ISO 100 is clean and ISO 6400 is visibly grainy in the shadows.
+   ===================================================================== */
+const Sensor = { FULL_WELL_REF: 12000, READ_NOISE: 3.0 };
+
+/* =====================================================================
+   6. LIGHTING MODEL — one calculation for illumination, sky colour and meter
+   ===================================================================== */
+const SUN = { elevationDeg: 9.5, azimuthDeg: 15 };   // fixed: low afternoon sun, ahead and to the right
+const SUN_DIR = (() => {                               // unit vector pointing TO the sun
+  const el = SUN.elevationDeg * DEG, az = SUN.azimuthDeg * DEG;
+  return { x: Math.sin(az) * Math.cos(el), y: Math.sin(el), z: Math.cos(az) * Math.cos(el) };
+})();
+const SKY_TOP = hex('#2f6ccc'), SKY_HOR = hex('#bcd9ef'), SKY_SUN_GLOW = hex('#ffe3ad');
+const SUN_STOPS = 8;                                   // the Sun-brightness slider spans eight stops (EV 7 → EV 15)
+
+/**
+ * computeLighting(env)  — env.sunBrightness ∈ [0,1] is the only environmental lighting control.
+ *  sunFactor : the sun's strength, 2^(−8·(1−s)): 0 % = dusk (EV 7), 100 % = full sun (EV 15)
+ *  direct    : direct-sun illuminance  (∝ sunFactor)
+ *  sky       : diffuse skylight, a fixed 15 % of the direct component (clear sky)
+ *  sceneEV100: 15 + log2(total / total_fullSun)   → sunny-16 calibration, i.e. 15 − 8·(1−s)
+ *  fill      : relative fill (sky + ground bounce, stylised ×3) used for flat tone shading
+ * Brightness is never baked into scene colours: it is applied once, as the exposure gain, in the sensor.
+ */
+function computeLighting(env) {
+  const s = clamp(env.sunBrightness, 0, 1);
+  const sunFactor = Math.pow(2, -SUN_STOPS * (1 - s));
+  const direct = sunFactor;
+  const sky = sunFactor * 0.15;
+  const total = direct + sky;
+  const REF_TOTAL = 1.0 + 0.15;
+  const sceneEV100 = Exposure.SUNNY_EV100 + log2(total / REF_TOTAL);
+  const fill = sky * 3;
+  const dusk = 1 - s;                       // 0 = full sun, 1 = dusk-like
+  const skyTop = mix(SKY_TOP, hex('#33406a'), dusk * 0.5);
+  const skyHor = mix(SKY_HOR, hex('#f0b27e'), dusk * 0.45);
+  return { sunFactor, direct, sky, total, sceneEV100, fill, sun: s, skyTop, skyHor, sunGlow: SKY_SUN_GLOW, warm: dusk };
+}
+/** Relative brightness factor of a surface with unit normal n (gentle tone shading, consistent sun direction).
+    Normalised so that a camera-facing surface ≈ 0.75 and a surface facing the sun is brighter.
+    Absolute brightness is NOT here — it lives in sceneEV100 and the exposure gain. */
+function surfaceLight(L, nx, ny, nz) {
+  const ndl = Math.max(0, nx * SUN_DIR.x + ny * SUN_DIR.y + nz * SUN_DIR.z);
+  return (L.fill + L.direct * ndl) / (L.fill + L.direct * 0.15);
+}
+
+/* =====================================================================
+   7. SCENE MODEL — the single authoritative world used by the viewfinder,
+      the scene editor, autofocus, motion and the capture pipeline.
+   ===================================================================== */
+const ROADS = [
+  { index: 0, name: 'Road 1', z: 10, width: 5 },   // near road     (7.5 – 12.5 m)
+  { index: 1, name: 'Road 2', z: 22, width: 5 }    // middle road   (19.5 – 24.5 m)
+];
+const WORLD_BOUNDS = { xMin: -24, xMax: 24, zMin: 2.2, zMax: 50 };   // where the person and sunflower may stand
+
+/** The three photographic subjects. The car is the only vehicle: it drives along a road and snaps to a lane when dragged.
+    Sizes are real: a 4.4 m × 1.45 m car, a 1.75 m person, a 1.3 m sunflower. Speeds are in m/s. */
+function createObjects() {
+  return [
+    { id: 'car', type: 'car', name: 'Car', vehicle: true, roadIndex: 1, laneOffset: -1.3, x: -5, z: 20.7, dir: 1, speed: 30 / 3.6,
+      wheel: 0, wheelR: 0.32, halfLen: 2.2, height: 1.45, color: hex('#c8452f') },
+    { id: 'person', type: 'person', name: 'Standing person', x: 1.5, z: 6.8, halfLen: 0.32, height: 1.75 },
+    { id: 'sunflower', type: 'sunflower', name: 'Sunflower', x: -0.75, z: 3.2, halfLen: 0.3, height: 1.3 }
+  ];
+}
+
+/** Ten trees at deliberate positions [x, z, height, kind]. Trees beyond 50 m are baked into the cached background. */
+const TREES = [
+  [-15, 33, 8.5, 'round'], [23, 38, 8.5, 'cone'], [21, 16, 7, 'round'], [-9, 30, 7, 'round'], [11, 34, 9, 'cone'],
+  [-4, 58, 10, 'cone'], [-20, 64, 9, 'round'], [26, 80, 11, 'cone'], [-34, 95, 11, 'cone'], [6, 100, 10, 'round']
+].map(([x, z, h, kind], i) => ({ x, z, h, kind, seed: i * 17 + 3 }));
+
+const DEFAULT_STATE = () => ({
+  camera: {
+    focalLength: 50, N: 5.6, t: 1 / 500, ISO: 100,          // manual exposure: always set by the user
+    focusDistance: 6.8, focusTarget: 6.8,                    // where the lens is focused now / is moving to (m)
+    focusLabel: 'the standing person', focusMark: { id: 'person' }   // what was clicked: a subject id or a box (render px) — UI only
+  },
+  env: { sunBrightness: 0.87 },                              // EV ≈ 14 — balanced for f/5.6, 1/500 s, ISO 100
+  ui: { activeView: 'viewfinder', preset: 'everyday' }
+});
+
+/* The single authoritative application state. */
+const state = DEFAULT_STATE();
+state.objects = createObjects();
+/* Derived values recomputed every frame (never edited by hand). */
+const runtime = { lighting: computeLighting(state.env), sceneEV100: 15, camEV100: 15, diff: 0, clip: { hi: 0, lo: 0 }, time: 0, focusAcquired: true };
+
+const getObj = id => state.objects.find(o => o.id === id);
+const roadLaneZ = (o, roadIndex) => ROADS[roadIndex].z + o.laneOffset;
+/** Effective speed right now (0 while being dragged) — motion and motion blur use this. */
+function effectiveSpeed(o) { return o.vehicle && !o.dragging ? o.speed : 0; }
+function anythingMoving() { return state.objects.some(o => effectiveSpeed(o) > 0); }
+
+/** Half-length of a vehicle's loop: just outside the current field of view, so wrapping is never seen. */
+function routeHalfLength(o) {
+  const halfTan = (SENSOR.widthMm / 2) / state.camera.focalLength;
+  return o.z * halfTan + 4 + o.halfLen;
+}
+
+/* ---------------- 8. Animation (time-based, not frame-based) ---------------- */
+function updateWorld(dt) {
+  runtime.time += dt;
+  for (const o of state.objects) {
+    if (!o.vehicle) continue;
+    if (o.zTarget !== undefined && !o.dragging) {          // smooth road snapping after a drag
+      const k = 1 - Math.exp(-dt / 0.08);
+      o.z += (o.zTarget - o.z) * k;
+      if (Math.abs(o.z - o.zTarget) < 0.01) { o.z = o.zTarget; delete o.zTarget; }
+    }
+    const v = effectiveSpeed(o);
+    if (v > 0) {
+      o.x += o.dir * v * dt;
+      o.wheel += v * dt / o.wheelR;                         // rolling without slipping: ω = v / r
+      const lim = routeHalfLength(o);
+      if (o.x * o.dir > lim) o.x = -o.dir * lim;            // re-enter from just outside the opposite edge
+    }
+  }
+}
+/* ---------------- 9. Focus — one focus distance, set by clicking the live view or by the slider ---------------- */
+const AF = {
+  RESPONSE_TIME: 0.07,   // focus-motor time constant (s), in dioptre space
+  /** Move the focus ring towards the target in dioptres (1/m): like a real lens, near focus needs more travel. */
+  update(dt) {
+    const cam = state.camera, d0 = 1 / cam.focusDistance, d1 = 1 / cam.focusTarget;
+    let d = d0 + (d1 - d0) * (1 - Math.exp(-dt / this.RESPONSE_TIME));
+    if (Math.abs(d - d1) < 1e-4) d = d1;
+    cam.focusDistance = 1 / d;
+    runtime.focusAcquired = Math.abs(d - d1) < 0.004;
+  },
+  /** Focus once at a distance (m). label and mark ({ id } of a subject, or a render-px box) only describe what was focused on. */
+  focusAt(dist, label, mark = null) {
+    Object.assign(state.camera, { focusTarget: clamp(dist, MIN_FOCUS, INFINITY_FOCUS), focusLabel: label, focusMark: mark });
+  },
+  /** Focus on a subject's current distance; the focus then holds even if the subject moves. */
+  focusOn(id) {
+    const o = getObj(id);
+    this.focusAt(o.z, 'the ' + o.name.toLowerCase(), { id });
+  }
+};
+
+/* ---------------- 10. Exposure state update (meter) — nothing here changes the camera settings ---------------- */
+function updateExposure() {
+  const cam = state.camera, L = runtime.lighting = computeLighting(state.env);
+  runtime.sceneEV100 = L.sceneEV100;
+  runtime.camEV100 = Exposure.cameraEV100(cam.N, cam.t, cam.ISO);
+  runtime.diff = runtime.sceneEV100 - runtime.camEV100;    // + = brighter than a correct exposure; drives image brightness
+}
+
+/* ---------------- 11. Experiments — they only reconfigure the live simulation ---------------- */
+const PRESETS = {
+  everyday: { label: 'Everyday', sub: 'Balanced daylight', explain: 'The default scene with a correct exposure in afternoon sun.', apply() { } },
+  portrait: { label: 'Portrait', sub: 'Shallow focus, 85 mm', explain: 'An 85 mm lens at f/1.8 focused on the person: the background melts into blur.', apply() {
+    state.env.sunBrightness = 0.64;                                     // soft afternoon light, EV ≈ 12
+    Object.assign(state.camera, { focalLength: 85, N: 1.8, t: 1 / 1250, ISO: 100 });
+    Object.assign(getObj('person'), { x: 0.35, z: 5 });
+    Object.assign(getObj('car'), { x: -2, speed: 0 });
+  } },
+  motion: { label: 'Motion Photography', sub: 'Moving car — try 1/30 s', explain: 'The car drives at 50 km/h. 1/1000 s freezes it — try 1/30 s for motion blur (then rebalance the light), or change the car speed.', apply() {
+    Object.assign(state.camera, { focalLength: 50, N: 8, t: 1 / 1000, ISO: 400 });   // 1/1000 s freezes 50 km/h
+    getObj('car').speed = 50 / 3.6;
+  } },
+  lowlight: { label: 'Low light', sub: 'Dusk, sun at 25\u00a0%', explain: 'Dusk light, EV 9. ISO 1600 keeps the exposure correct — look for noise in the shadows.', apply() {
+    state.env.sunBrightness = 0.25;                                     // EV 9 — six stops below full sun
+    Object.assign(state.camera, { N: 5.6, t: 1 / 250, ISO: 1600 });    // balanced, but at high ISO: look for noise
+  } }
+};
+const PRESET_FOCUS = { everyday: 'person', portrait: 'person', motion: 'car', lowlight: 'person' };
+/** Restore the default scene, then apply an experiment (Everyday = the default scene) and focus on its subject. */
+function applyPreset(key) {
+  const d = DEFAULT_STATE();
+  Object.assign(state.camera, d.camera);
+  Object.assign(state.env, d.env);
+  const fresh = createObjects();
+  for (const o of state.objects) { const f = fresh.find(x => x.id === o.id); for (const k of Object.keys(o)) delete o[k]; Object.assign(o, f); }
+  PRESETS[key].apply();
+  AF.focusOn(PRESET_FOCUS[key]); state.camera.focusDistance = state.camera.focusTarget;
+  state.ui.preset = key;
+}
+
+/* =====================================================================
+   12. PROJECTION ENGINE
+   ---------------------------------------------------------------------
+   Pinhole perspective with the camera at (0, CAMERA_HEIGHT, 0) looking along +Z:
+     screenX = cx + f_px · X / Z
+     screenY = cy − f_px · (Y − CAMERA_HEIGHT) / Z
+   f_px = focalLength_mm × imageWidth_px / 36 mm.  Changing focal length changes only f_px
+   (magnification); the camera position never changes, so perspective between subjects is preserved.
+   ===================================================================== */
+function makeProjector(fMm, W, H) {
+  const f = Optics.focalPixels(fMm, W), cx = W / 2, cy = H * PRINCIPAL_Y;
+  return {
+    f, cx, cy, W, H, fMm,
+    x: (X, Z) => cx + f * X / Z,
+    y: (Y, Z) => cy - f * (Y - CAMERA_HEIGHT) / Z,
+    k: Z => f / Z,                             // pixels per metre on the plane at depth Z
+    /** ground point (X, 0, Z) → screen */
+    g: (X, Z) => [cx + f * X / Z, cy + f * CAMERA_HEIGHT / Z]
+  };
+}
+/** Draw in the vertical plane at depth z using world metres: for a plane of constant Z the perspective
+    projection is an exact affine map, so canvas transforms reproduce it precisely. */
+function withPlane(ctx, P, z, fn) {
+  const k = P.f / z;
+  ctx.save();
+  ctx.transform(k, 0, 0, -k, P.cx, P.cy + k * CAMERA_HEIGHT);
+  fn(k);
+  ctx.restore();
+}
+/* ---------------- Colour helpers that depend on lighting & distance ---------------- */
+/** Atmospheric perspective: distant things fade towards the horizon sky colour. */
+function haze(z) { return 0.62 * (1 - Math.exp(-z / 4000)); }
+function litColor(base, L, nx, ny, nz, z) {
+  let c = shade(base, surfaceLight(L, nx, ny, nz));
+  if (L.warm > 0) c = mix(c, [c[0] * 1.08, c[1] * 0.97, c[2] * 0.85], L.warm * 0.6);
+  return z ? mix(c, L.skyHor, haze(z)) : c;
+}
+
+/* =====================================================================
+   13. ENTITY GEOMETRY & DRAWING (all built from reusable primitives)
+   ===================================================================== */
+function capsule(ctx, ax, ay, bx, by, r, color) {
+  ctx.strokeStyle = color; ctx.lineWidth = r * 2; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+}
+function disc(ctx, x, y, r, color) { ctx.fillStyle = color; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); }
+function poly(ctx, pts, color) {
+  ctx.fillStyle = color; ctx.beginPath();
+  for (let i = 0; i < pts.length; i++) i ? ctx.lineTo(pts[i][0], pts[i][1]) : ctx.moveTo(pts[i][0], pts[i][1]);
+  ctx.closePath(); ctx.fill();
+}
+const SKIN = hex('#d29a74'), HAIR = hex('#3a2818');
+
+/* ---- Standing person (front view) ---- */
+const PERSON = {
+  shirt: hex('#3b72b3'), trousers: hex('#2d303b'), shoes: hex('#1d1d20'),
+  bounds(o, pose) { return { x0: pose.x - 0.34, x1: pose.x + 0.34, y0: 0, y1: o.height + 0.01, z0: pose.z, z1: pose.z }; },
+  body(ctx, P, o, pose, L, time) {
+    const z = pose.z, hz = haze(z), fr = surfaceLight(L, 0, 0, -1);
+    const col = (c, f = 1) => rgb(mix(shade(c, fr * f), L.skyHor, hz));
+    const breathe = 0.004 * Math.sin(time * 1.7);
+    withPlane(ctx, P, z, () => {
+      ctx.translate(pose.x, 0);
+      capsule(ctx, -0.1, 0.9, -0.11, 0.08, 0.075, col(this.trousers, 0.95));
+      capsule(ctx, 0.1, 0.9, 0.11, 0.08, 0.075, col(this.trousers, 1.05));
+      ctx.fillStyle = col(this.shoes);
+      ctx.beginPath(); ctx.ellipse(-0.12, 0.04, 0.08, 0.04, 0, 0, Math.PI * 2); ctx.ellipse(0.12, 0.04, 0.08, 0.04, 0, 0, Math.PI * 2); ctx.fill();
+      const sh = 1.44 + breathe;
+      poly(ctx, [[-0.2, sh], [0, sh + 0.02], [0, 0.88], [-0.17, 0.88]], col(this.shirt, 0.9));
+      poly(ctx, [[0, sh + 0.02], [0.2, sh], [0.17, 0.88], [0, 0.88]], col(this.shirt, 1.12));
+      poly(ctx, [[-0.17, 0.88], [0.17, 0.88], [0.172, 0.93], [-0.172, 0.93]], col(this.trousers, 0.7));
+      // arms: sleeve then forearm, hand
+      for (const s of [-1, 1]) {
+        const f = s > 0 ? 1.1 : 0.9;
+        capsule(ctx, s * 0.215, sh - 0.04, s * 0.255, 1.17, 0.056, col(this.shirt, f));
+        capsule(ctx, s * 0.255, 1.17, s * 0.275, 0.97, 0.046, col(SKIN, f));
+        disc(ctx, s * 0.278, 0.94, 0.042, col(SKIN, f));
+      }
+      poly(ctx, [[-0.045, sh], [0.045, sh], [0.045, sh + 0.09], [-0.045, sh + 0.09]], col(SKIN, 0.8));
+      disc(ctx, 0, 1.6, 0.105, col(SKIN));
+      ctx.fillStyle = col(HAIR);
+      ctx.beginPath(); ctx.arc(0, 1.612, 0.112, 0.12, Math.PI - 0.12); ctx.lineTo(-0.112, 1.6); ctx.lineTo(-0.1, 1.58); ctx.closePath(); ctx.fill();
+      // face: always part of the geometry (at a distance it simply becomes too small or too blurred to see)
+      disc(ctx, -0.036, 1.595, 0.011, col(hex('#2a1d14')));
+      disc(ctx, 0.036, 1.595, 0.011, col(hex('#2a1d14')));
+      ctx.strokeStyle = col(hex('#8c4d3c')); ctx.lineWidth = 0.008; ctx.beginPath(); ctx.arc(0, 1.572, 0.026, -2.4, -0.74); ctx.stroke();
+    });
+  }
+};
+
+/* ---- Car: flat side profile, 4.4 m × 1.45 m, mirrored to face its direction of travel ---- */
+const CAR = {
+  glass: hex('#9cc0d6'), tyre: hex('#1d1e21'), rim: hex('#c3c7cd'),
+  bounds(o, pose) { return { x0: pose.x - 2.25, x1: pose.x + 2.25, y0: 0, y1: 1.47, z0: pose.z, z1: pose.z }; },
+  body(ctx, P, o, pose, L) {
+    const hz = haze(pose.z), fr = surfaceLight(L, 0, 0, -1), C = (c, k = 1) => rgb(mix(shade(c, fr * k), L.skyHor, hz));
+    withPlane(ctx, P, pose.z, () => {
+      ctx.translate(pose.x, 0); ctx.scale(o.dir, 1);
+      ctx.fillStyle = C(o.color); ctx.beginPath();                               // one-piece body silhouette
+      ctx.moveTo(-2.2, 0.32); ctx.lineTo(2.2, 0.32); ctx.quadraticCurveTo(2.26, 0.78, 1.9, 0.8);
+      ctx.lineTo(0.95, 0.88); ctx.quadraticCurveTo(0.55, 1.42, 0.1, 1.45); ctx.lineTo(-1.0, 1.45);
+      ctx.quadraticCurveTo(-1.45, 1.4, -1.7, 0.92); ctx.lineTo(-2.15, 0.88); ctx.quadraticCurveTo(-2.28, 0.6, -2.2, 0.32);
+      ctx.fill();
+      poly(ctx, [[0.82, 0.93], [0.15, 1.36], [-0.3, 1.36], [-0.3, 0.93]], C(this.glass));       // front window
+      poly(ctx, [[-0.42, 0.93], [-0.42, 1.36], [-0.95, 1.36], [-1.45, 0.93]], C(this.glass));   // rear window
+      for (const u of [-1.35, 1.35]) {                     // wheels: the spokes turn at ω = v / r, so they blur too
+        disc(ctx, u, 0.32, 0.32, C(this.tyre)); disc(ctx, u, 0.32, 0.19, C(this.rim));
+        ctx.strokeStyle = C(this.tyre); ctx.lineWidth = 0.035; ctx.beginPath();
+        for (let i = 0; i < 4; i++) { const a = -pose.wheel + i * Math.PI / 2; ctx.moveTo(u, 0.32); ctx.lineTo(u + Math.cos(a) * 0.17, 0.32 + Math.sin(a) * 0.17); }
+        ctx.stroke();
+      }
+    });
+  }
+};
+
+/* ---- Sunflower: stem, two leaves, two rings of rounded petals and a large dark centre ---- */
+const SUNFLOWER = {
+  bounds(o, pose) { return { x0: pose.x - 0.3, x1: pose.x + 0.3, y0: 0, y1: 1.5, z0: pose.z, z1: pose.z }; },
+  body(ctx, P, o, pose, L) {
+    const hz = haze(pose.z), fr = surfaceLight(L, 0, 0.3, -1), C = (c, k = 1) => rgb(mix(shade(c, fr * k), L.skyHor, hz));
+    const hy = 1.22;                                                              // centre of the flower head (m)
+    withPlane(ctx, P, pose.z, () => {
+      ctx.translate(pose.x, 0);
+      capsule(ctx, 0, 0, 0, hy, 0.018, C(hex('#4b7f2f')));
+      ctx.fillStyle = C(hex('#56923a'));
+      for (const [x, y, a] of [[0.11, 0.5, 0.5], [-0.11, 0.78, -0.5]]) { ctx.beginPath(); ctx.ellipse(x, y, 0.13, 0.05, a, 0, Math.PI * 2); ctx.fill(); }
+      for (const [r, len, col, off] of [[0.15, 0.1, '#f0b51d', 0], [0.13, 0.085, '#f7c83a', Math.PI / 16]]) {
+        ctx.fillStyle = C(hex(col));
+        for (let i = 0; i < 16; i++) { const a = off + i / 16 * Math.PI * 2; ctx.beginPath(); ctx.ellipse(Math.cos(a) * r, hy + Math.sin(a) * r, len, 0.035, a, 0, Math.PI * 2); ctx.fill(); }
+      }
+      disc(ctx, 0, hy, 0.1, C(hex('#5a3818')));
+      disc(ctx, 0, hy, 0.065, C(hex('#45290f')));
+    });
+  }
+};
+
+/* ---- Trees: one trunk and ONE solid-coloured crown (round or conifer) each. Every tree sits in its own
+        depth plane, so it is projected, hazed and defocused like the subjects. ---- */
+/** Fill the current path with one flat, lit, hazed colour. */
+function flatFill(ctx, base, L, hz, nx = 0, ny = 0.3, nz = -1) {
+  ctx.fillStyle = rgb(mix(litColor(base, L, nx, ny, nz), L.skyHor, hz));
+  ctx.fill();
+}
+const TREE = {
+  bounds(d) { const w = d.kind === 'cone' ? d.h * 0.25 : d.h * 0.34; return { x0: d.x - w, x1: d.x + w, y0: 0, y1: d.h * 1.02, z0: d.z, z1: d.z }; },
+  body(ctx, P, d, L) {
+    const hz = haze(d.z), rng = makeRng(d.seed), h = d.h;
+    withPlane(ctx, P, d.z, () => {
+      ctx.translate(d.x, 0);
+      // simple tapered trunk
+      ctx.beginPath(); ctx.moveTo(-0.018 * h, 0); ctx.lineTo(0.018 * h, 0); ctx.lineTo(0.014 * h, 0.3 * h); ctx.lineTo(-0.014 * h, 0.3 * h); ctx.closePath();
+      flatFill(ctx, hex('#5b4330'), L, hz, 0, 0, -1);
+      if (d.kind === 'cone') {                       // conifer: a single triangular silhouette
+        ctx.beginPath(); ctx.moveTo(-h * 0.24, 0.14 * h); ctx.lineTo(0, h); ctx.lineTo(h * 0.24, 0.14 * h); ctx.closePath();
+        flatFill(ctx, hex(rng() < 0.5 ? '#2f6a3e' : '#35703f'), L, hz, 0.4, 0.3, -1);
+      } else {                                       // broadleaf: a single round crown
+        ctx.beginPath(); ctx.arc(0, h * 0.62, h * 0.32, 0, Math.PI * 2);
+        flatFill(ctx, hex(rng() < 0.5 ? '#4f8a35' : '#56913a'), L, hz, 0.4, 0.3, -1);
+      }
+    });
+  }
+};
+const ENTITY = { car: CAR, person: PERSON, sunflower: SUNFLOWER };
+
+/* ---- Landscape geometry: hills & mountains. Each range is a ridge line with real depth (so it projects
+        correctly at every focal length), drawn as one flat silhouette. Triangles between the ridge and a
+        lower "shoulder" row are kept only for the highest peaks, where they are drawn as snow caps. ---- */
+function buildRange(seed, Z, xHalf, step, hMin, hMax, depthK) {
+  const rng = makeRng(seed), ridge = [], shoulder = [], base = [];
+  const n = Math.ceil(2 * xHalf / step) + 1, ph1 = rng() * 6, ph2 = rng() * 6;
+  for (let i = 0; i <= n; i++) {
+    const x = -xHalf + i * step, u = x / xHalf;
+    const wave = 0.5 + 0.28 * Math.sin(u * 3.1 + ph1) + 0.17 * Math.sin(u * 7.3 + ph2) + 0.12 * (rng() - 0.5);
+    ridge.push([x, hMin + (hMax - hMin) * clamp(wave, 0, 1), Z + (rng() - 0.5) * step * 0.3]);
+  }
+  for (let i = 0; i < n; i++) {
+    const h = (ridge[i][1] + ridge[i + 1][1]) / 2;
+    shoulder.push([ridge[i][0] + step / 2 + (rng() - 0.5) * step * 0.3, h * (0.42 + rng() * 0.12), Z - h * depthK * 0.55]);
+  }
+  for (let i = 0; i <= n; i++) base.push([ridge[i][0], 0, Z - ridge[i][1] * depthK]);
+  const snow = [];
+  for (let i = 0; i < n; i++) {
+    snow.push([ridge[i], ridge[i + 1], shoulder[i]]);
+    if (i < n - 1) snow.push([shoulder[i], ridge[i + 1], shoulder[i + 1]]);
+  }
+  return { ridge, base, Z, hMax, snow: snow.filter(t => (t[0][1] + t[1][1] + t[2][1]) / 3 > hMax * 0.72) };
+}
+const LANDSCAPE = {
+  mountainsFar: buildRange(91, 6200, 7600, 230, 420, 1150, 0.9),
+  mountainsNear: buildRange(57, 3100, 3900, 140, 160, 560, 1.0),
+  hills: [buildRange(12, 420, 520, 30, 5, 19, 1.6), buildRange(33, 270, 340, 20, 3, 11, 1.8), buildRange(71, 165, 220, 13, 1.5, 6, 2.0)]
+};
+/* Ground subdivision into depth bands so each band can receive its own optical blur. */
+const GROUND_BANDS = (() => {
+  const zs = new Set();
+  for (let z = 1.0; z < 430; z *= 1.13) zs.add(+z.toFixed(3));
+  for (const r of ROADS) { const a = r.z - r.width / 2, b = r.z + r.width / 2; [a - 0.6, a, b, b + 0.6].forEach(v => zs.add(v)); }
+  const list = [...zs].sort((a, b) => a - b), bands = [];
+  for (let i = 0; i < list.length - 1; i++) {
+    const z0 = list[i], z1 = list[i + 1], zm = (z0 + z1) / 2;
+    let kind = 'grass', road = null;
+    for (const r of ROADS) {
+      const a = r.z - r.width / 2, b = r.z + r.width / 2;
+      if (zm > a && zm < b) { kind = 'road'; road = r; } else if (zm > a - 0.6 && zm < b + 0.6) kind = 'shoulder';
+    }
+    bands.push({ z0, z1, zm: Math.sqrt(z0 * z1), kind, road, i });
+  }
+  return bands;
+})();
+/* =====================================================================
+   14. THE RENDERER — layered depth-of-field, motion integration, sensor model
+   ===================================================================== */
+const FILTER_BLUR_SUPPORTED = (() => {
+  try {
+    const c = document.createElement('canvas'); c.width = c.height = 9;
+    const x = c.getContext('2d'); x.filter = 'blur(2px)'; x.fillStyle = '#fff'; x.fillRect(4, 4, 1, 1);
+    return x.getImageData(2, 4, 1, 1).data[3] > 0;
+  } catch (e) { return false; }
+})();
+function makeCanvas(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
+/** Quantise blur so that neighbouring depths can share a single blur pass (performance). */
+function blurBucket(s) { return s < 0.35 ? 0 : s < 2 ? Math.round(s * 4) / 4 : s < 6 ? Math.round(s * 2) / 2 : Math.round(s); }
+
+/* Gaussian noise table (Box–Muller), generated once. */
+const NOISE = (() => {
+  const n = 1 << 20, t = new Float32Array(n), rng = makeRng(777);
+  for (let i = 0; i < n; i += 2) {
+    const u = Math.max(1e-9, rng()), v = rng(), r = Math.sqrt(-2 * Math.log(u));
+    t[i] = r * Math.cos(2 * Math.PI * v); t[i + 1] = r * Math.sin(2 * Math.PI * v);
+  }
+  return t;
+})();
+/* sRGB ↔ linear lookup for 8-bit values. Value 255 is reserved as an HDR marker for the sun's disc,
+   which in reality is thousands of times brighter than anything else in the scene. */
+const SUN_HDR = 14;
+const LIN8 = (() => { const t = new Float32Array(256); for (let i = 0; i < 256; i++) t[i] = srgbToLinear(i / 255); t[255] = SUN_HDR; return t; })();
+/* Tone curve: linear up to 0.8, then a soft shoulder to white (keeps mid-tones honest, rolls off highlights). */
+const TONE_MAX = 2.5, TONE_N = 4096;
+const TONE = (() => {
+  const t = new Uint8ClampedArray(TONE_N + 1);
+  for (let i = 0; i <= TONE_N; i++) {
+    const x = i / TONE_N * TONE_MAX;
+    const y = x < 0.8 ? x : 0.8 + 0.2 * (1 - Math.exp(-(x - 0.8) / 0.2));
+    t[i] = Math.round(linearToSrgb(Math.min(1, y)) * 255);
+  }
+  return t;
+})();
+
+class Renderer {
+  constructor(W, H, opts = {}) {
+    this.W = W; this.H = H;
+    this.M = Math.ceil(W * 0.1);                    // layer margin so blur never darkens frame edges
+    this.sigmaMax = this.M / 3.4;
+    this.maxSamples = opts.maxSamples || 16;
+    this.scene = makeCanvas(W, H); this.sctx = this.scene.getContext('2d');
+    this.bg = makeCanvas(W, H); this.bgctx = this.bg.getContext('2d');
+    this.layer = makeCanvas(W + 2 * this.M, H + 2 * this.M); this.lctx = this.layer.getContext('2d');
+    this.sample = makeCanvas(W + 2 * this.M, H + 2 * this.M); this.smctx = this.sample.getContext('2d');
+    this.small = makeCanvas(8, 8); this.smallctx = this.small.getContext('2d');
+    this.out = makeCanvas(W, H); this.octx = this.out.getContext('2d');
+    // Pixels are read back from a separate CPU-side canvas, so the GPU-composited scene canvas is
+    // never read directly (browsers may otherwise demote it to slow software rendering).
+    this.proc = makeCanvas(W, H); this.pctx = this.proc.getContext('2d', { willReadFrequently: true });
+    this.bgKey = '';
+    // vignette radius index (0..255) per pixel, measured from the optical axis (principal point)
+    this.vq = new Uint8Array(W * H);
+    const cx = W / 2, cy = H * PRINCIPAL_Y, rmax = Math.hypot(W / 2, H * (1 - PRINCIPAL_Y));
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const r = Math.hypot(x - cx, y - cy) / rmax; this.vq[y * W + x] = Math.min(255, Math.round(r * r * 255)); }
+    this.lin = new Float32Array(256); this.sig = new Float32Array(256); this.vg = new Float32Array(256);
+  }
+
+  /* ---- layer helpers ---- */
+  clampBox(b) {
+    const M = this.M;
+    const x0 = Math.max(-M, Math.floor(b.x0)), y0 = Math.max(-M, Math.floor(b.y0));
+    const x1 = Math.min(this.W + M, Math.ceil(b.x1)), y1 = Math.min(this.H + M, Math.ceil(b.y1));
+    return { x: x0, y: y0, w: Math.max(0, x1 - x0), h: Math.max(0, y1 - y0) };
+  }
+  beginLayer(ctx, canvas, box) {
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+    ctx.clearRect(box.x + this.M, box.y + this.M, box.w, box.h);
+    ctx.save(); ctx.translate(this.M, this.M);
+    ctx.beginPath(); ctx.rect(box.x, box.y, box.w, box.h); ctx.clip();
+    return ctx;
+  }
+  endLayer(ctx) { ctx.restore(); }
+  /** Composite a layer region onto `dst` with a Gaussian blur of σ px (canvas filter, or a down/up-sample fallback). */
+  composite(dst, src, box, sigma, alpha = 1) {
+    if (box.w <= 0 || box.h <= 0) return;
+    const M = this.M, s = Math.min(sigma, this.sigmaMax);
+    dst.save(); dst.globalAlpha = alpha;
+    if (s < 0.35) dst.drawImage(src, box.x + M, box.y + M, box.w, box.h, box.x, box.y, box.w, box.h);
+    else if (FILTER_BLUR_SUPPORTED && s >= 3) {
+      // Wide blur: blur at 1/k resolution, then upsample. A Gaussian this wide has removed all detail finer
+      // than ~σ, so sampling every σ/1.5 px loses nothing visible while costing ~k² less.
+      const k = Math.min(4, s / 1.5), w = Math.max(1, Math.ceil(box.w / k)), h = Math.max(1, Math.ceil(box.h / k));
+      if (this.small.width < w || this.small.height < h) { this.small.width = Math.max(w, this.small.width); this.small.height = Math.max(h, this.small.height); }
+      const sc = this.smallctx; sc.filter = 'none'; sc.clearRect(0, 0, w, h);
+      sc.imageSmoothingEnabled = true; sc.imageSmoothingQuality = 'medium';
+      if (!this.small2 || this.small2.width < w || this.small2.height < h) { this.small2 = makeCanvas(Math.max(w, this.small2 ? this.small2.width : 0), Math.max(h, this.small2 ? this.small2.height : 0)); this.small2ctx = this.small2.getContext('2d'); }
+      const s2 = this.small2ctx; s2.filter = 'none'; s2.clearRect(0, 0, w, h);
+      s2.drawImage(src, box.x + M, box.y + M, box.w, box.h, 0, 0, box.w / k, box.h / k);
+      sc.filter = `blur(${(s / k).toFixed(2)}px)`; sc.drawImage(this.small2, 0, 0, w, h, 0, 0, w, h); sc.filter = 'none';
+      dst.imageSmoothingEnabled = true; dst.imageSmoothingQuality = 'high';
+      dst.drawImage(this.small, 0, 0, box.w / k, box.h / k, box.x, box.y, box.w, box.h);
+    } else if (FILTER_BLUR_SUPPORTED) {
+      dst.filter = `blur(${s.toFixed(2)}px)`;
+      dst.drawImage(src, box.x + M, box.y + M, box.w, box.h, box.x, box.y, box.w, box.h);
+    } else {
+      const k = Math.max(1, s * 0.9), w = Math.max(1, Math.round(box.w / k)), h = Math.max(1, Math.round(box.h / k));
+      if (this.small.width < w || this.small.height < h) { this.small.width = Math.max(w, this.small.width); this.small.height = Math.max(h, this.small.height); }
+      this.smallctx.clearRect(0, 0, w, h); this.smallctx.imageSmoothingQuality = 'high';
+      this.smallctx.drawImage(src, box.x + M, box.y + M, box.w, box.h, 0, 0, w, h);
+      dst.imageSmoothingEnabled = true; dst.imageSmoothingQuality = 'high';
+      dst.drawImage(this.small, 0, 0, w, h, box.x, box.y, box.w, box.h);
+    }
+    dst.restore();
+  }
+  /** Optical blur σ (px) for something at depth z — the heart of depth of field. */
+  sigmaAt(z, cam) {
+    const coc = Optics.cocMm(cam.focalLength, cam.N, z, cam.focusDistance);
+    return Math.min(this.sigmaMax, Optics.blurSigmaFromCoc(Optics.mmToPixels(coc, this.W)));
+  }
+  projectBox(P, b, pad) {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const X of [b.x0, b.x1]) for (const Y of [b.y0, b.y1]) for (const Z of [b.z0, b.z1]) {
+      const z = Math.max(Z, NEAR_PLANE), sx = P.x(X, z), sy = P.y(Y, z);
+      if (sx < x0) x0 = sx; if (sx > x1) x1 = sx; if (sy < y0) y0 = sy; if (sy > y1) y1 = sy;
+    }
+    return { x0: x0 - pad, y0: y0 - pad, x1: x1 + pad, y1: y1 + pad };
+  }
+  /* ---------------- static background (cached while optics & light are unchanged) ---------------- */
+  renderBackground(P, cam, L) {
+    const ctx = this.bgctx, W = this.W, H = this.H;
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.filter = 'none'; ctx.globalAlpha = 1; ctx.clearRect(0, 0, W, H);
+    // --- Sky gradient by elevation angle (smooth, so no blur needed) ---
+    const yTop = P.cy - P.f * Math.tan(32 * DEG);
+    const g = ctx.createLinearGradient(0, Math.min(yTop, -1), 0, P.cy);
+    g.addColorStop(0, rgb(L.skyTop)); g.addColorStop(0.7, rgb(mix(L.skyTop, L.skyHor, 0.55))); g.addColorStop(1, rgb(L.skyHor));
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    const sunX = P.cx + P.f * Math.tan(SUN.azimuthDeg * DEG), sunY = P.cy - P.f * Math.tan(SUN.elevationDeg * DEG) / Math.cos(SUN.azimuthDeg * DEG);
+    const glowR = P.f * Math.tan(16 * DEG);
+    const gg = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, glowR);
+    gg.addColorStop(0, rgb(L.sunGlow, 0.85)); gg.addColorStop(0.25, rgb(L.sunGlow, 0.35)); gg.addColorStop(1, rgb(L.sunGlow, 0));
+    ctx.fillStyle = gg; ctx.fillRect(0, 0, W, H);
+
+    // --- Sun disc at infinity (its own layer, blurred with the CoC of an object at ∞) ---
+    const sInf = this.sigmaAt(Infinity, cam);
+    const lc = this.beginLayer(this.lctx, this.layer, { x: -this.M, y: -this.M, w: W + 2 * this.M, h: H + 2 * this.M });
+    const sunR = P.f * Math.tan(0.75 * DEG);
+    lc.fillStyle = 'rgb(255,255,255)'; lc.beginPath(); lc.arc(sunX, sunY, sunR, 0, Math.PI * 2); lc.fill();   // HDR marker
+    this.endLayer(lc);
+    this.composite(ctx, this.layer, this.clampBox({ x0: -this.M, y0: -this.M, x1: W + this.M, y1: H + this.M }), sInf);
+
+    // --- Mountains (far then near), each range one blur layer ---
+    for (const range of [LANDSCAPE.mountainsFar, LANDSCAPE.mountainsNear]) this.drawRangeLayer(ctx, P, cam, L, range, 'mountain');
+    // --- Ground bands, grouped by blur bucket (bands never overlap each other on screen) ---
+    this.drawGround(ctx, P, cam, L);
+    // --- Hills (in front of the far ground, behind everything else) ---
+    for (const range of LANDSCAPE.hills) this.drawRangeLayer(ctx, P, cam, L, range, 'hill');
+    // --- Far trees (z > 50) ---
+    const far = TREES.filter(d => d.z > 50).sort((a, b) => b.z - a.z);
+    this.drawGrouped(ctx, P, cam, L, far.map(d => ({ z: d.z, draw: c => TREE.body(c, P, d, L), box: this.projectBox(P, TREE.bounds(d), 2) })));
+  }
+  drawRangeLayer(ctx, P, cam, L, range, kind) {
+    const W = this.W;
+    const yTopWorld = range.hMax * 1.05;
+    const box = this.clampBox({ x0: -this.M, x1: W + this.M, y0: P.y(yTopWorld, range.Z - 10) - 4, y1: P.y(0, range.Z * 0.6) + 4 });
+    if (box.h <= 0) return;
+    const lc = this.beginLayer(this.lctx, this.layer, box);
+    const hz = haze(range.Z), tone = c => rgb(mix(litColor(c, L, 0, 0.3, -1), L.skyHor, hz));
+    let body;
+    if (kind === 'mountain') body = range.Z > 5000 ? hex('#7484a0') : hex('#647a78');
+    else body = mix(hex('#4f8a3c'), hex('#8cb15a'), clamp((range.Z - 165) / 255, 0, 1) * 0.7);
+    // one flat silhouette: ridge line → base line
+    const pts = range.ridge.concat(range.base.slice().reverse());
+    lc.beginPath();
+    pts.forEach((p, i) => { const sx = P.x(p[0], p[2]), sy = P.y(p[1], p[2]); i ? lc.lineTo(sx, sy) : lc.moveTo(sx, sy); });
+    lc.closePath(); lc.fillStyle = tone(body); lc.fill();
+    lc.strokeStyle = tone(body.map(v => v * 0.82)); lc.lineWidth = 1; lc.lineJoin = 'round';
+    lc.beginPath(); range.ridge.forEach((p, i) => { const sx = P.x(p[0], p[2]), sy = P.y(p[1], p[2]); i ? lc.lineTo(sx, sy) : lc.moveTo(sx, sy); }); lc.stroke();
+    // flat snow caps on the highest peaks
+    if (kind === 'mountain') {
+      lc.fillStyle = lc.strokeStyle = tone(hex('#eef1f4')); lc.lineWidth = 0.7;
+      for (const t of range.snow) {
+        lc.beginPath();
+        for (let i = 0; i < 3; i++) { const p = t[i], sx = P.x(p[0], p[2]), sy = P.y(p[1], p[2]); i ? lc.lineTo(sx, sy) : lc.moveTo(sx, sy); }
+        lc.closePath(); lc.fill(); lc.stroke();
+      }
+    }
+    this.endLayer(lc);
+    this.composite(ctx, this.layer, box, this.sigmaAt(range.Z, cam));
+  }
+  /** Ground: ~60 depth bands, each with its own optical blur. Bands are drawn far → near in runs that share
+      one blur value. Every run also paints a strip of the nearer ground underneath itself, so the soft
+      (blurred) top edge of the next run always lies over solid ground. Without this overlap, adjacent runs
+      blurred separately left see-through seams — horizontal lines that jumped around as focus changed. */
+  drawGround(ctx, P, cam, L) {
+    const yOf = z => P.cy + P.f * CAMERA_HEIGHT / z;
+    const bands = GROUND_BANDS.filter(b => yOf(b.z1) < this.H + this.M && yOf(b.z0) > P.cy - 1).reverse();
+    const runs = [];
+    for (const b of bands) {
+      const s = blurBucket(this.sigmaAt(b.zm, cam)), last = runs[runs.length - 1];
+      if (last && last.s === s) last.bands.push(b); else runs.push({ s, bands: [b] });
+    }
+    runs.forEach((run, k) => {
+      const next = runs[k + 1], first = bands.indexOf(run.bands[0]);
+      const yEnd = next ? yOf(run.bands[run.bands.length - 1].z0) + 3 * (run.s + next.s) + 2 : this.H + this.M;
+      const box = this.clampBox({ x0: -this.M, x1: this.W + this.M, y0: yOf(run.bands[0].z1) - 3 * run.s - 2, y1: yEnd + 3 * run.s + 2 });
+      const lc = this.beginLayer(this.lctx, this.layer, box);
+      for (let i = first; i < bands.length && (i < first + run.bands.length || yOf(bands[i].z1) < yEnd); i++) this.drawBand(lc, P, L, bands[i]);
+      this.endLayer(lc);
+      this.composite(ctx, this.layer, box, run.s);
+    });
+  }
+  /** One ground band (grass, road shoulder or road) as a single flat quad, plus road markings. */
+  drawBand(ctx, P, L, b) {
+    const xHalf = b.z1 * 1.25 + 14, z0 = b.z0, z1 = b.z1, hz = haze(b.zm);
+    const grass = mix(hex('#68a042'), hex('#86a955'), clamp((b.zm - 5) / 140, 0, 1));
+    const ground = litColor(b.kind === 'road' ? hex('#56585d') : b.kind === 'shoulder' ? hex('#a6916a') : grass, L, 0, 1, 0);
+    const quad = (xa, xb, za, zb, nearPad = 0) => {
+      const p = [P.g(xa, za), P.g(xb, za), P.g(xb, zb), P.g(xa, zb)];
+      ctx.beginPath(); ctx.moveTo(p[0][0], p[0][1] + nearPad); ctx.lineTo(p[1][0], p[1][1] + nearPad);
+      ctx.lineTo(p[2][0], p[2][1]); ctx.lineTo(p[3][0], p[3][1]); ctx.closePath(); ctx.fill();
+    };
+    // The near edge reaches 1.5 px further; the nearer band (drawn next) covers it, so no anti-aliasing seam.
+    ctx.fillStyle = rgb(mix(ground, L.skyHor, hz)); quad(-xHalf, xHalf, z0, z1, 1.5);
+    if (b.kind === 'road') {          // markings that fall inside this band
+      const r = b.road, a = r.z - r.width / 2, e = r.z + r.width / 2;
+      const mark = (xa, xb, za, zb) => { const za2 = Math.max(za, z0), zb2 = Math.min(zb, z1); if (zb2 > za2) quad(xa, xb, za2, zb2); };
+      ctx.fillStyle = rgb(mix(litColor(hex('#dcd5c2'), L, 0, 1, 0), L.skyHor, hz));
+      mark(-xHalf, xHalf, a + 0.2, a + 0.32); mark(-xHalf, xHalf, e - 0.32, e - 0.2);
+      ctx.fillStyle = rgb(mix(litColor(hex('#e0c055'), L, 0, 1, 0), L.skyHor, hz));
+      for (let x = -Math.ceil(xHalf / 6) * 6; x < xHalf; x += 6) mark(x, x + 3, r.z - 0.07, r.z + 0.07);
+    }
+  }
+  /** Draw static items far→near, batching neighbours that share a blur bucket into one blur pass. */
+  drawGrouped(ctx, P, cam, L, items) {
+    let i = 0;
+    while (i < items.length) {
+      const s = blurBucket(this.sigmaAt(items[i].z, cam));
+      let j = i, x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      while (j < items.length && blurBucket(this.sigmaAt(items[j].z, cam)) === s) {
+        const b = items[j].box; x0 = Math.min(x0, b.x0); y0 = Math.min(y0, b.y0); x1 = Math.max(x1, b.x1); y1 = Math.max(y1, b.y1); j++;
+      }
+      const box = this.clampBox({ x0: x0 - 3 * s, y0: y0 - 3 * s, x1: x1 + 3 * s, y1: y1 + 3 * s });
+      if (box.w > 0 && box.h > 0) {
+        const lc = this.beginLayer(this.lctx, this.layer, box);
+        for (let k = i; k < j; k++) items[k].draw(lc);
+        this.endLayer(lc);
+        this.composite(ctx, this.layer, box, s);
+      }
+      i = j;
+    }
+  }
+
+  /* ---------------- per-frame rendering ---------------- */
+  /**
+   * Render one photograph of the current simulation state.
+   * Pipeline: cached background → depth-sorted subjects and scenery (each with its own defocus blur
+   * and shutter-interval motion integration) → sensor (exposure gain, vignetting, noise, tone curve).
+   */
+  render() {
+    const cam = state.camera, L = runtime.lighting, W = this.W, H = this.H;
+    const P = makeProjector(cam.focalLength, W, H);
+    this.P = P;
+    const key = [cam.focalLength, cam.N, cam.focusDistance.toFixed(4), state.env.sunBrightness].join('|');
+    if (key !== this.bgKey) { this.renderBackground(P, cam, L); this.bgKey = key; }
+    const ctx = this.sctx;
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.filter = 'none'; ctx.globalCompositeOperation = 'source-over';
+    ctx.drawImage(this.bg, 0, 0);
+
+    const shutter = cam.t, time = runtime.time;
+    // ---- collect drawable items (subjects + near decor) ----
+    const items = [];
+    for (const o of state.objects) {
+      const E = ENTITY[o.type], v = effectiveSpeed(o);
+      const dir = o.dir || 1, w0 = o.wheel || 0;
+      const pose = tau => ({ x: o.x + dir * v * tau, z: o.z, wheel: w0 + v * tau / (o.wheelR || 1) });
+      const z = o.z;                                            // depth of the plane the subject is drawn in
+      // image-space streak during the exposure → number of time samples
+      const streak = v > 0 ? Optics.motionStreakPx(Optics.imageSpeedPx(v, z, cam.focalLength, W), shutter) : 0;
+      const n = v > 0 ? clamp(Math.ceil(streak / 1.5), 1, this.maxSamples) : 1;
+      const b0 = E.bounds(o, pose(-shutter / 2)), b1 = E.bounds(o, pose(shutter / 2));
+      const wb = { x0: Math.min(b0.x0, b1.x0), x1: Math.max(b0.x1, b1.x1), y0: 0, y1: b0.y1, z0: b0.z0, z1: b0.z1 };
+      const sigma = this.sigmaAt(z, cam);
+      items.push({ o, E, z, sigma, n, pose, streak, moving: v > 0, wb, bNow: E.bounds(o, pose(0)) });
+    }
+    for (const d of TREES) if (d.z <= 50) items.push({ d, E: TREE, z: d.z, sigma: this.sigmaAt(d.z, cam), n: 1, moving: false, wb: TREE.bounds(d) });
+    items.sort((a, b) => b.z - a.z);
+
+    // ---- bodies, far → near ----
+    const hits = [];
+    let i = 0;
+    while (i < items.length) {
+      const it = items[i];
+      if (!it.moving && !it.o) {                       // batch consecutive static decor with equal blur
+        const s = blurBucket(it.sigma); let j = i; const batch = [];
+        while (j < items.length && !items[j].moving && !items[j].o && blurBucket(items[j].sigma) === s) batch.push(items[j++]);
+        this.drawGrouped(ctx, P, cam, L, batch.map(b => ({ z: b.z, draw: c => b.E.body(c, P, b.d, L), box: this.projectBox(P, b.wb, 2) })));
+        i = j; continue;
+      }
+      const box = this.clampBox(this.projectBox(P, it.wb, 3 * it.sigma + 3));
+      if (box.w > 0 && box.h > 0) {
+        this.drawSampled(box, it, shutter, time);
+        this.composite(ctx, this.layer, box, it.sigma);
+      }
+      if (it.o) {
+        const hb = this.projectBox(P, it.bNow, 0);
+        const inFrame = hb.x1 > 0 && hb.x0 < W && hb.y1 > 0 && hb.y0 < H;
+        hits.push({ id: it.o.id, z: it.z, box: hb, inFrame, streak: it.streak, sigma: it.sigma });
+      }
+      i++;
+    }
+    this.hits = hits;
+    const stats = this.develop();
+    return { hits, stats, P };
+  }
+  /**
+   * Draw an item into this.layer, integrating light over the shutter interval:
+   * n poses at times τ = −t/2 … +t/2 are rendered and averaged (additive blending of
+   * premultiplied colour with weight 1/n). A stationary subject gets exactly one sample.
+   */
+  drawSampled(box, it, shutter, time) {
+    const P = this.P, L = runtime.lighting;
+    const draw = (c, pose) => { it.o ? it.E.body(c, P, it.o, pose, L, time) : it.E.body(c, P, it.d, L); };
+    const lc = this.beginLayer(this.lctx, this.layer, box);
+    if (it.n <= 1) draw(lc, it.o ? it.pose(0) : null);
+    else {
+      this.endLayer(lc);
+      this.lctx.setTransform(1, 0, 0, 1, 0, 0);
+      for (let k = 0; k < it.n; k++) {
+        const tau = -shutter / 2 + (k + 0.5) / it.n * shutter;
+        const sc = this.beginLayer(this.smctx, this.sample, box);
+        draw(sc, it.pose(tau));
+        this.endLayer(sc);
+        this.lctx.globalCompositeOperation = 'lighter'; this.lctx.globalAlpha = 1 / it.n;
+        this.lctx.drawImage(this.sample, box.x + this.M, box.y + this.M, box.w, box.h, box.x + this.M, box.y + this.M, box.w, box.h);
+      }
+      this.lctx.globalCompositeOperation = 'source-over'; this.lctx.globalAlpha = 1;
+      return;
+    }
+    this.endLayer(lc);
+  }
+
+  /**
+   * "Develop" the sensor image: the composited scene holds scene radiance for a correct exposure.
+   * For every pixel (linear light):  out = (radiance × 2^Δ + noise) × vignette → tone curve → sRGB.
+   *   Δ (stops)   = sceneEV100 − cameraEV100              (exposure gain, incl. ISO gain)
+   *   photons     = radiance × 2^(sceneEV − log2(N²/t)) × FULL_WELL_REF   (ISO does not appear!)
+   *   noise σ     = √(photons + readNoise²) / FULL_WELL_REF × ISO/100
+   * Clipping statistics (shown under the meter) are measured on the output.
+   */
+  develop() {
+    const cam = state.camera, W = this.W, H = this.H;
+    this.pctx.drawImage(this.scene, 0, 0);
+    const img = this.pctx.getImageData(0, 0, W, H), d = img.data;
+    const gain = Exposure.gain(runtime.diff);
+    const photonGain = Math.pow(2, Exposure.photonStops(runtime.sceneEV100, cam.N, cam.t));
+    const isoGain = cam.ISO / 100, FW = Sensor.FULL_WELL_REF, RN2 = Sensor.READ_NOISE ** 2;
+    const S = TONE_N / TONE_MAX, lin = this.lin, sig = this.sig, vg = this.vg;
+    let maxSig = 0;
+    for (let i = 0; i < 256; i++) {
+      const L = LIN8[i];
+      lin[i] = L * gain * S;
+      sig[i] = Math.sqrt(L * photonGain * FW + RN2) / FW * isoGain * S;
+      if (i < 255 && sig[i] > maxSig) maxSig = sig[i];
+    }
+    // Vignetting: wider apertures darken the corners more (stops at the corner).
+    const vigStops = 0.25 + 0.8 * clamp((4 - cam.N) / 2.6, 0, 1);
+    for (let k = 0; k < 256; k++) vg[k] = Math.pow(2, -vigStops * (k / 255));
+    const useNoise = maxSig / S * 255 > 0.35;    // skip the noise path when it would be invisible
+    const T = TONE, TN = TONE_N, vq = this.vq, N = NOISE, MASK = N.length - 1;
+    const off = (Math.random() * N.length) | 0;
+    let hi = 0, lo = 0, cnt = 0;
+    for (let y = 0; y < H; y++) {
+      const statRow = (y & 1) === 0;
+      let p = y * W, i = p * 4, nIdx = (off + y * 7919) & MASK;
+      for (let x = 0; x < W; x++, p++, i += 4) {
+        const v = vg[vq[p]];
+        const r0 = d[i], g0 = d[i + 1], b0 = d[i + 2];
+        let r = lin[r0], g = lin[g0], b = lin[b0];
+        if (useNoise) {
+          const nl = N[nIdx], na = N[(nIdx + 1) & MASK], nb = N[(nIdx + 2) & MASK];
+          nIdx = (nIdx + 3) & MASK;
+          r += sig[r0] * (0.8 * nl + 0.6 * na); g += sig[g0] * (0.8 * nl - 0.3 * na + 0.52 * nb); b += sig[b0] * (0.8 * nl - 0.6 * nb);
+        }
+        r *= v; g *= v; b *= v;
+        const R = r <= 0 ? 0 : r >= TN ? 255 : T[r | 0], G = g <= 0 ? 0 : g >= TN ? 255 : T[g | 0], B = b <= 0 ? 0 : b >= TN ? 255 : T[b | 0];
+        d[i] = R; d[i + 1] = G; d[i + 2] = B; d[i + 3] = 255;
+        if (statRow && (x & 1) === 0) {           // sample every 4th pixel for clipping statistics
+          cnt++;
+          const mx = R > G ? (R > B ? R : B) : (G > B ? G : B);
+          if (mx >= 253) hi++; else if (mx <= 6) lo++;
+        }
+      }
+    }
+    this.octx.putImageData(img, 0, 0);
+    return { clipHi: hi / cnt, clipLo: lo / cnt, noise: useNoise };
+  }
+}
+
+/* =====================================================================
+   15. LIVE VIEWFINDER — the developed photograph + one focus indicator (display canvas only, never in photos)
+   ===================================================================== */
+const $ = id => document.getElementById(id);
+const VF = {
+  canvas: null, ctx: null, cw: 0, ch: 0, fit: { x: 0, y: 0, w: 1, h: 1 },
+  init() {
+    this.canvas = $('vfCanvas'); this.ctx = this.canvas.getContext('2d');
+    this.canvas.addEventListener('click', e => this.onClick(e));
+    this.canvas.addEventListener('keydown', e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); Capture.shoot(); } });
+  },
+  resize() {
+    const r = this.canvas.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1);
+    const w = Math.max(2, Math.round(r.width * dpr)), h = Math.max(2, Math.round(r.height * dpr));
+    if (w !== this.cw || h !== this.ch) { this.canvas.width = this.cw = w; this.canvas.height = this.ch = h; }
+    const s = Math.min(w / 3, h / 2);                       // letterbox the 3:2 photograph inside the canvas
+    this.fit = { x: (w - 3 * s) / 2, y: (h - 2 * s) / 2, w: 3 * s, h: 2 * s };
+    this.dpr = dpr;
+  },
+  /** Click to focus: on the nearest subject or tree under the cursor, otherwise on the ground or at infinity. */
+  onClick(e) {
+    const R = App.live, P = R.P, before = Explain.snapshot(), r = this.canvas.getBoundingClientRect();
+    const pt = { x: ((e.clientX - r.left) * this.cw / r.width - this.fit.x) / this.fit.w * R.W, y: ((e.clientY - r.top) * this.ch / r.height - this.fit.y) / this.fit.h * R.H };
+    const under = b => pt.x >= b.x0 - 4 && pt.x <= b.x1 + 4 && pt.y >= b.y0 - 4 && pt.y <= b.y1 + 4;
+    const hit = R.hits.filter(h => h.inFrame && under(h.box)).map(h => ({ z: h.z, label: 'the ' + getObj(h.id).name.toLowerCase(), box: { id: h.id } }))
+      .concat(TREES.map(d => ({ z: d.z, label: 'a tree', box: R.projectBox(P, TREE.bounds(d), 0) })).filter(c => under(c.box)))
+      .sort((a, b) => a.z - b.z)[0];                        // the front-most object is the one you can see
+    const mark = { x0: pt.x - 14, y0: pt.y - 14, x1: pt.x + 14, y1: pt.y + 14 };
+    if (hit) AF.focusAt(hit.z, hit.label, hit.box);
+    else if (pt.y > P.cy + 0.5) AF.focusAt(P.f * CAMERA_HEIGHT / (pt.y - P.cy), 'the ground', mark);   // flat ground: Z = f·h ÷ (y − y_horizon)
+    else AF.focusAt(INFINITY_FOCUS, 'the sky and mountains', mark);
+    Explain.focus(before);
+    App.dirty = true; UI.sync(true);
+  },
+  draw() {
+    const ctx = this.ctx, R = App.live, f = this.fit;
+    if (!R.hits) return;                       // a freshly created renderer has not produced a frame yet
+    let m = state.camera.focusMark;
+    if (m && m.id) { const h = R.hits.find(h => h.id === m.id); m = h && h.inFrame ? h.box : null; }   // brackets follow a focused subject
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = '#10110f'; ctx.fillRect(0, 0, this.cw, this.ch);
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(R.out, f.x, f.y, f.w, f.h);
+    if (!m) return;
+    // focus brackets where you clicked: white while the lens moves, green once focused
+    const s = f.w / R.W, X = x => clamp(f.x + x * s, f.x + 2, f.x + f.w - 2), Y = y => clamp(f.y + y * s, f.y + 2, f.y + f.h - 2);
+    const x0 = X(m.x0) - 4, y0 = Y(m.y0) - 4, x1 = X(m.x1) + 4, y1 = Y(m.y1) + 4, L = Math.min(16 * this.dpr, (x1 - x0) / 3, (y1 - y0) / 3);
+    ctx.strokeStyle = runtime.focusAcquired ? '#4cd97b' : '#ffffff'; ctx.lineWidth = 2 * this.dpr; ctx.beginPath();
+    for (const [x, y, sx, sy] of [[x0, y0, 1, 1], [x1, y0, -1, 1], [x0, y1, 1, -1], [x1, y1, -1, -1]]) { ctx.moveTo(x + sx * L, y); ctx.lineTo(x, y); ctx.lineTo(x, y + sy * L); }
+    ctx.stroke();
+  }
+};
+
+/* =====================================================================
+   16. TOP-DOWN SCENE MAP — same objects, seen from above, moved by dragging
+   ===================================================================== */
+const ED = {
+  canvas: null, ctx: null, cw: 0, ch: 0, sx: 1, drag: null, selId: 'car', Z0: -2, Z1: 53, GAMMA: 0.72,
+  init() {
+    this.canvas = $('edCanvas'); this.ctx = this.canvas.getContext('2d');
+    const c = this.canvas;
+    c.addEventListener('pointerdown', e => this.down(e));
+    c.addEventListener('pointermove', e => this.move(e));
+    c.addEventListener('pointerup', e => this.up(e));
+    c.addEventListener('pointercancel', e => this.up(e));
+  },
+  resize() {
+    const r = this.canvas.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1);
+    const w = Math.max(2, Math.round(r.width * dpr)), h = Math.max(2, Math.round(r.height * dpr));
+    if (w !== this.cw || h !== this.ch) { this.canvas.width = this.cw = w; this.canvas.height = this.ch = h; }
+    this.dpr = dpr; this.sx = w / 56;            // 56 m across the map
+  },
+  /* Depth uses a compressed (power-law) scale so the crowded near field gets more room;
+     the labels show true metres. Horizontal positions are linear. */
+  zToY(z) { const v = Math.pow(clamp((z - this.Z0) / (this.Z1 - this.Z0), 0, 1.2), this.GAMMA); return this.ch - 14 * this.dpr - v * (this.ch - 26 * this.dpr); },
+  yToZ(y) { const v = clamp((this.ch - 14 * this.dpr - y) / (this.ch - 26 * this.dpr), 0, 1.2); return this.Z0 + Math.pow(v, 1 / this.GAMMA) * (this.Z1 - this.Z0); },
+  w2s(x, z) { return [this.cw / 2 + x * this.sx, this.zToY(z)]; },
+  s2w(px, py) { return [(px - this.cw / 2) / this.sx, this.yToZ(py)]; },
+  evt(e) { const r = this.canvas.getBoundingClientRect(); return [(e.clientX - r.left) * this.cw / r.width, (e.clientY - r.top) * this.ch / r.height]; },
+  pick(px, py) {
+    let best = null, bd = 22 * this.dpr;
+    for (const o of state.objects) {
+      const [sx, sy] = this.w2s(o.x, o.z), rx = Math.max(bd, o.halfLen * this.sx);    // the car is long: pick along its length
+      const d = Math.hypot((px - sx) / rx, (py - sy) / bd);
+      if (d <= 1 && (!best || d < best.d)) best = { o, d };
+    }
+    return best ? best.o : null;
+  },
+  down(e) {
+    const [px, py] = this.evt(e), o = this.pick(px, py);
+    if (!o) return;
+    this.selId = o.id; UI.syncEditor();
+    const [wx, wz] = this.s2w(px, py);
+    this.drag = { o, dx: o.x - wx, dz: o.z - wz, before: Explain.snapshot(), fromRoad: o.roadIndex, fromZ: o.z, id: e.pointerId };
+    o.dragging = true; delete o.zTarget;
+    this.canvas.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  },
+  move(e) {
+    const [px, py] = this.evt(e);
+    if (!this.drag) { this.canvas.style.cursor = this.pick(px, py) ? 'grab' : 'default'; return; }
+    this.canvas.style.cursor = 'grabbing';
+    const o = this.drag.o; let [wx, wz] = this.s2w(px, py); wx += this.drag.dx; wz += this.drag.dz;
+    if (o.vehicle) { o.x = clamp(wx, -30, 30); o.z = clamp(wz, ROADS[0].z - 4, ROADS[ROADS.length - 1].z + 4); }
+    else { o.x = clamp(wx, WORLD_BOUNDS.xMin, WORLD_BOUNDS.xMax); o.z = clamp(wz, WORLD_BOUNDS.zMin, WORLD_BOUNDS.zMax); }
+    App.dirty = true; UI.syncEditor();
+  },
+  up() {
+    if (!this.drag) return;
+    const d = this.drag, o = d.o; this.drag = null; o.dragging = false;
+    if (o.vehicle) {                                       // snap to the nearest road lane
+      let best = 0; ROADS.forEach((r, i) => { if (Math.abs(o.z - roadLaneZ(o, i)) < Math.abs(o.z - roadLaneZ(o, best))) best = i; });
+      o.roadIndex = best; o.zTarget = roadLaneZ(o, best);
+    }
+    if (state.camera.focusMark && !state.camera.focusMark.id) state.camera.focusMark = null;   // a clicked spot no longer marks the same thing
+    Explain.moved(o, d.fromZ, o.zTarget !== undefined ? o.zTarget : o.z, d.fromRoad);
+    App.dirty = true; UI.syncEditor();
+  },
+  inCone(o) { const half = Optics.horizontalFov(state.camera.focalLength) / 2; return Math.abs(Math.atan2(o.x, o.z)) <= half; },
+  draw() {
+    const ctx = this.ctx, W = this.cw, H = this.ch, d = this.dpr, cam = state.camera;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = '#62765d'; ctx.fillRect(0, 0, W, H);
+    // far region (beyond the editable area)
+    const [, yTop] = this.w2s(0, 51);
+    const g = ctx.createLinearGradient(0, 0, 0, yTop); g.addColorStop(0, '#6c7075'); g.addColorStop(1, '#62765d');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, yTop);
+    ctx.fillStyle = '#7e8aa0'; ctx.beginPath(); ctx.moveTo(0, yTop);
+    for (let i = 0; i <= 24; i++) { const x = i / 24 * W; ctx.lineTo(x, yTop - (10 + 14 * Math.abs(Math.sin(i * 1.7))) * d); }
+    ctx.lineTo(W, yTop); ctx.fill();
+    ctx.font = `${11 * d}px ui-sans-serif, system-ui`; ctx.fillStyle = '#e0e2e5';
+    ctx.fillText('Mountains ≈ 3–6 km away · fixed, not to scale', 38 * d, 16 * d);   // clear of the frame corner
+    // distance grid
+    ctx.strokeStyle = 'rgba(255,255,255,.12)'; ctx.lineWidth = d;
+    const gridZ = [2, 5, 10, 15, 20, 30, 40, 50];
+    for (const z of gridZ) { const [, y] = this.w2s(0, z); ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+    // roads
+    for (const r of ROADS) {
+      const [, ya] = this.w2s(0, r.z + r.width / 2), [, yb] = this.w2s(0, r.z - r.width / 2);
+      ctx.fillStyle = '#55585d'; ctx.fillRect(0, ya, W, yb - ya);
+      ctx.strokeStyle = 'rgba(242,214,110,.85)'; ctx.setLineDash([8 * d, 8 * d]); ctx.beginPath(); const [, yc] = this.w2s(0, r.z); ctx.moveTo(0, yc); ctx.lineTo(W, yc); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle = '#ffffff'; ctx.font = `600 ${11 * d}px ui-sans-serif, system-ui`; const t = `${r.name} · ${r.z} m · fixed`;
+      ctx.fillText(t, W - ctx.measureText(t).width - 8 * d, ya + 13 * d);
+    }
+    ctx.font = `${11 * d}px ui-sans-serif, system-ui`; ctx.fillStyle = 'rgba(255,255,255,.78)';
+    for (const z of gridZ) { const [, y] = this.w2s(0, z); ctx.fillText(z + ' m', 6 * d, y - 3 * d); }
+    // near decor
+    for (const t of TREES) if (t.z <= 52) {
+      const [x, y] = this.w2s(t.x, t.z);
+      ctx.fillStyle = '#3f7a3a'; ctx.beginPath(); ctx.arc(x, y, 6 * d, 0, Math.PI * 2); ctx.fill();
+    }
+    // viewing cone, depth of field band, focus plane (polylines: the depth axis is non-linear)
+    const half = Optics.horizontalFov(cam.focalLength) / 2, a = Math.tan(half), tz = 53;
+    const [cx, cy] = this.w2s(0, 0);
+    const edge = (sign, z0, z1) => { const pts = []; for (let i = 0; i <= 24; i++) { const z = z0 + (z1 - z0) * i / 24; pts.push(this.w2s(sign * a * z, z)); } return pts; };
+    const dof = Optics.dofLimits(cam.focalLength, cam.N, cam.focusDistance);
+    const zn = clamp(dof.nearM, 0, tz), zf = clamp(dof.farM, 0, tz);
+    if (zf > zn) {
+      const p = edge(-1, zn, zf).concat(edge(1, zn, zf).reverse());
+      ctx.fillStyle = 'rgba(95,224,138,.22)'; ctx.beginPath(); p.forEach((q, i) => i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])); ctx.fill();
+    }
+    const L = edge(-1, 0, tz), Rr = edge(1, 0, tz);
+    ctx.fillStyle = 'rgba(242,179,61,.12)'; ctx.strokeStyle = 'rgba(242,179,61,.95)'; ctx.lineWidth = 1.5 * d;
+    ctx.beginPath(); L.concat(Rr.slice().reverse()).forEach((q, i) => i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])); ctx.fill();
+    for (const side of [L, Rr]) { ctx.beginPath(); side.forEach((q, i) => i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])); ctx.stroke(); }
+    if (cam.focusDistance < tz) {
+      const fz = cam.focusDistance, [fx0, fy] = this.w2s(-a * fz, fz), [fx1] = this.w2s(a * fz, fz);
+      ctx.strokeStyle = '#5fe08a'; ctx.setLineDash([5 * d, 4 * d]); ctx.lineWidth = 1.5 * d; ctx.beginPath(); ctx.moveTo(fx0, fy); ctx.lineTo(fx1, fy); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle = '#5fe08a'; ctx.font = `600 ${11 * d}px ui-sans-serif, system-ui`; ctx.fillText(`focus ${fmtDist(fz)}`, Math.max(fx1, cx + 60 * d) + 8 * d, fy + 4 * d);
+    }
+    ctx.fillStyle = '#f2b33d'; ctx.font = `600 ${11 * d}px ui-sans-serif, system-ui`;
+    ctx.fillText(`${cam.focalLength} mm · ${(2 * half / DEG).toFixed(1)}° view`, cx - 150 * d, cy + 4 * d);
+    // sun (fixed, infinitely far)
+    const sunDirX = Math.tan(SUN.azimuthDeg * DEG) * 51, [sx, sy] = this.w2s(sunDirX, 51);
+    ctx.strokeStyle = 'rgba(255,220,130,.35)'; ctx.setLineDash([3 * d, 5 * d]); ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(sx, sy + 12 * d); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = '#ffd36b'; ctx.beginPath(); ctx.arc(sx, sy, 8 * d, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#ffd36b'; ctx.lineWidth = 1.5 * d; ctx.beginPath();
+    for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; ctx.moveTo(sx + Math.cos(a) * 11 * d, sy + Math.sin(a) * 11 * d); ctx.lineTo(sx + Math.cos(a) * 15 * d, sy + Math.sin(a) * 15 * d); }
+    ctx.stroke(); ctx.fillStyle = '#fff1c9'; ctx.font = `${10.5 * d}px ui-sans-serif, system-ui`; ctx.fillText('Sun · fixed, ∞ away', sx + 18 * d, sy + 4 * d);
+    // vehicle routes & drag ghost
+    for (const o of state.objects) if (o.vehicle) {
+      const [, y] = this.w2s(0, o.zTarget !== undefined ? o.zTarget : o.z);
+      ctx.strokeStyle = 'rgba(255,255,255,.22)'; ctx.setLineDash([2 * d, 6 * d]); ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); ctx.setLineDash([]);
+      if (this.drag && this.drag.o === o) {
+        let best = 0; ROADS.forEach((r, i) => { if (Math.abs(o.z - roadLaneZ(o, i)) < Math.abs(o.z - roadLaneZ(o, best))) best = i; });
+        const [gx, gy] = this.w2s(o.x, roadLaneZ(o, best));
+        ctx.strokeStyle = '#f2b33d'; ctx.setLineDash([4 * d, 3 * d]); ctx.strokeRect(gx - o.halfLen * this.sx, gy - 6 * d, 2 * o.halfLen * this.sx, 12 * d); ctx.setLineDash([]);
+        ctx.fillStyle = '#f2b33d'; ctx.fillText(`snaps to ${ROADS[best].name}`, gx + o.halfLen * this.sx + 6 * d, gy + 4 * d);
+      }
+    }
+    // camera
+    ctx.fillStyle = '#f2b33d'; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(cx - 12 * d, cy - 8 * d, 24 * d, 14 * d, 3 * d) : ctx.rect(cx - 12 * d, cy - 8 * d, 24 * d, 14 * d); ctx.fill();
+    ctx.fillStyle = '#302109'; ctx.beginPath(); ctx.arc(cx, cy - 1 * d, 4 * d, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#ffffff'; ctx.font = `${10 * d}px ui-sans-serif, system-ui`; ctx.fillText('Camera (fixed, 1.6 m high)', cx + 16 * d, cy + 6 * d);
+    // objects
+    for (const o of state.objects) this.drawObj(ctx, o);
+  },
+  drawObj(ctx, o) {
+    const d = this.dpr, [x, y] = this.w2s(o.x, o.z), inside = this.inCone(o);
+    ctx.globalAlpha = inside ? 1 : 0.55;
+    if (o.type === 'car') {
+      const hw = o.halfLen * this.sx;
+      ctx.fillStyle = rgb(o.color); ctx.fillRect(x - hw, y - 6 * d, 2 * hw, 12 * d);
+      ctx.fillStyle = '#9cc0d6'; ctx.fillRect(x - hw * 0.5, y - 4.5 * d, hw, 9 * d);
+    } else if (o.type === 'person') {
+      ctx.fillStyle = '#3b72b3'; ctx.beginPath(); ctx.arc(x, y, 7 * d, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#d29a74'; ctx.beginPath(); ctx.arc(x, y, 3.5 * d, 0, Math.PI * 2); ctx.fill();
+    } else {                                                  // sunflower
+      ctx.fillStyle = '#f2bf1d'; ctx.beginPath(); ctx.arc(x, y, 7 * d, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#5a3818'; ctx.beginPath(); ctx.arc(x, y, 3.5 * d, 0, Math.PI * 2); ctx.fill();
+    }
+    if (o.vehicle) { ctx.fillStyle = 'rgba(255,255,255,.7)'; ctx.beginPath(); const ax = x + o.dir * (o.halfLen * this.sx + 10 * d); ctx.moveTo(ax, y); ctx.lineTo(ax - o.dir * 7 * d, y - 4 * d); ctx.lineTo(ax - o.dir * 7 * d, y + 4 * d); ctx.fill(); }
+    if (this.selId === o.id) {
+      ctx.strokeStyle = '#f2b33d'; ctx.lineWidth = 2 * d;
+      ctx.beginPath(); ctx.ellipse(x, y, Math.max(13 * d, o.halfLen * this.sx + 6 * d), 13 * d, 0, 0, Math.PI * 2); ctx.stroke();
+    }
+    ctx.font = `600 ${10.5 * d}px ui-sans-serif, system-ui`; ctx.fillStyle = '#ffffff';
+    ctx.fillText(o.name, x + Math.max(15 * d, o.halfLen * this.sx + 8 * d), y - 6 * d);
+    ctx.globalAlpha = 1;
+  }
+};
+
+/* =====================================================================
+   17. INSIDE THE CAMERA — live schematic driven by the same state
+   ===================================================================== */
+const MECH = {
+  canvas: null, ctx: null,
+  init() { this.canvas = $('mechCanvas'); this.ctx = this.canvas.getContext('2d'); },
+  /* Fixed layout in a 1000 × 300 drawing space. Every component owns a column: its title sits on the top row,
+     its annotations on the two bottom rows, and text is shrunk to fit its column, so labels can never overlap. */
+  draw() {
+    const c = this.canvas, r = c.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1);
+    const w = Math.round(r.width * dpr), h = Math.round(r.height * dpr);
+    if (!w || !h) return;
+    if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+    const ctx = this.ctx, cam = state.camera, f = cam.focalLength, N = cam.N;
+    ctx.setTransform(w / 1000, 0, 0, w / 1000, 0, 0); ctx.fillStyle = '#eeeae1'; ctx.fillRect(0, 0, 1000, 300);
+    const A = 150, LX = 300, SHX = 548, SX = 640, GX = 735, IX = 840;    // optical axis and component positions
+    const fs = clamp(10.5 * 1000 / (w / dpr), 11, 16);     // ≈ 10.5 px on screen, whatever the canvas width
+    const label = (t, x, y, maxW, col = '#4b4e49', size = fs, weight = '') => {
+      ctx.fillStyle = col; ctx.textAlign = 'center';
+      do ctx.font = `${weight} ${size}px ui-sans-serif, system-ui`; while (ctx.measureText(t).width > maxW && --size > 8);
+      ctx.fillText(t, x, y);
+    };
+    // column titles
+    [['SCENE', 110, 200], ['LENS + APERTURE', 318, 150], ['SHUTTER', 554, 84], ['SENSOR', 646, 84], ['ISO GAIN', 770, 110], ['IMAGE', 912, 150]]
+      .forEach(([t, x, mw]) => label(t, x, 24, mw, '#6e726c', fs - 1, '600'));
+    ctx.strokeStyle = '#b9b1a3'; ctx.lineWidth = 1; ctx.setLineDash([3, 4]); ctx.beginPath(); ctx.moveTo(20, A); ctx.lineTo(980, A); ctx.stroke(); ctx.setLineDash([]);
+    // scene: the focused subject (green) and the mountains at infinity (blue)
+    const S1 = [170, A - 52], B1 = [70, A - 45];
+    ctx.fillStyle = '#3b72b3'; ctx.fillRect(S1[0] - 7, S1[1] + 10, 14, 42);
+    ctx.fillStyle = '#d29a74'; ctx.beginPath(); ctx.arc(S1[0], S1[1] + 2, 8, 0, 7); ctx.fill();
+    ctx.fillStyle = '#9aa6b5'; ctx.beginPath(); ctx.moveTo(40, A); ctx.lineTo(B1[0], B1[1]); ctx.lineTo(100, A); ctx.fill();
+    // rays through the aperture opening. Image distances from the thin lens, exaggerated ×EX so mm shifts are visible
+    const EX = 140, open = 150 * (1.4 / N), vF = Optics.imageDistance(f, cam.focusDistance * 1000);
+    const xImg = v => SX + clamp((v - vF) * EX, -220, 110);
+    const now = performance.now() / 1000, ph = (now % 2.4) / 2.4, tFrac = 0.12 + 0.55 * clamp((log2(cam.t) + 11) / 11, 0, 1);
+    const openState = ph > 0.12 && ph < 0.12 + tFrac;
+    const curtain = ph < 0.12 ? ph / 0.12 : ph < 0.12 + tFrac ? 1 : ph < 0.24 + tFrac ? 1 - (ph - 0.12 - tFrac) / 0.12 : 0;
+    const rays = (P0, xi, yi, col) => {
+      const top = [LX, A - open / 2], bot = [LX, A + open / 2];
+      ctx.fillStyle = col.replace('ALPHA', openState ? '.16' : '.06');
+      ctx.beginPath(); ctx.moveTo(P0[0], P0[1]); ctx.lineTo(top[0], top[1]); ctx.lineTo(bot[0], bot[1]); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(top[0], top[1]); ctx.lineTo(xi, yi); ctx.lineTo(bot[0], bot[1]); ctx.fill();
+      ctx.strokeStyle = col.replace('ALPHA', '.85'); ctx.lineWidth = 1.2; ctx.beginPath();
+      ctx.moveTo(P0[0], P0[1]); ctx.lineTo(top[0], top[1]); ctx.lineTo(xi, yi); ctx.moveTo(P0[0], P0[1]); ctx.lineTo(bot[0], bot[1]); ctx.lineTo(xi, yi); ctx.stroke();
+      // where the cone meets the sensor: a point if in focus, otherwise a blur disc (thick bar)
+      const at = y0 => y0 + (yi - y0) * (SX - LX) / (xi - LX), a = at(top[1]), b = at(bot[1]);
+      if (xi < SX) { ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.moveTo(xi, yi); ctx.lineTo(SX, a); ctx.moveTo(xi, yi); ctx.lineTo(SX, b); ctx.stroke(); ctx.setLineDash([]); }
+      ctx.strokeStyle = col.replace('ALPHA', '1'); ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(SX + 2, Math.min(a, b) - 1.5); ctx.lineTo(SX + 2, Math.max(a, b) + 1.5); ctx.stroke();
+    };
+    rays(B1, xImg(f), A + 26, 'rgba(65,108,182,ALPHA)');
+    rays(S1, xImg(vF), A + 52, 'rgba(40,122,69,ALPHA)');
+    // lens and aperture blades
+    ctx.fillStyle = 'rgba(165,196,224,.3)'; ctx.strokeStyle = 'rgba(70,110,140,.7)'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.ellipse(LX, A, 13, 100, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#d8d2c7'; ctx.strokeStyle = '#8a8378';
+    for (const [y, hh] of [[A - 108, 108 - open / 2], [A + open / 2, 108 - open / 2]]) { ctx.fillRect(LX + 22, y, 9, hh); ctx.strokeRect(LX + 22, y, 9, hh); }
+    // shutter (slow-motion cycle) and sensor (brightness ∝ photons collected)
+    ctx.fillStyle = '#e7e2d8'; ctx.strokeRect(SHX, A - 105, 12, 210); ctx.fillStyle = '#b9b1a3'; ctx.fillRect(SHX, A - 105, 12, (1 - curtain) * 210);
+    const photons = Exposure.photonStops(runtime.sceneEV100, N, cam.t), lum = clamp(0.35 + 0.18 * photons, 0.03, 1) * (openState ? 1 : 0.75);
+    ctx.fillStyle = `rgb(${Math.round(120 + 120 * lum)},${Math.round(130 + 110 * lum)},${Math.round(140 + 95 * lum)})`; ctx.fillRect(SX, A - 100, 12, 200);
+    // ISO amplifier (size grows with gain) and the developed image
+    const g = cam.ISO / 100, gs = 18 + 6 * log2(g);
+    ctx.strokeStyle = '#8a8378'; ctx.beginPath(); ctx.moveTo(SX + 12, A); ctx.lineTo(GX, A); ctx.moveTo(GX + gs * 1.6, A); ctx.lineTo(IX, A); ctx.stroke();
+    ctx.strokeStyle = '#a86b16'; ctx.fillStyle = 'rgba(168,107,22,.12)';
+    ctx.beginPath(); ctx.moveTo(GX, A - gs); ctx.lineTo(GX + gs * 1.6, A); ctx.lineTo(GX, A + gs); ctx.closePath(); ctx.fill(); ctx.stroke();
+    if (App.live.out) { ctx.drawImage(App.live.out, IX, A - 48, 145, 97); ctx.strokeStyle = '#b9b1a3'; ctx.strokeRect(IX, A - 48, 145, 97); }
+    // annotations: what each mechanism is doing right now
+    const r1 = 272, r2 = 292;
+    label(`● in focus: ${fmtDist(cam.focusDistance)}`, 110, r1, 200, '#287a45');
+    label('▲ mountains: ∞', 110, r2, 200, '#416cb6');
+    label(`opening Ø ${Optics.apertureDiameter(f, N).toFixed(1)} mm`, 318, r1, 150);
+    label(`= ${f} mm ÷ ${N}`, 318, r2, 150, '#6e726c');
+    label(shutterLabel(cam.t), 554, r1, 84);
+    label('open (slowed)', 554, r2, 84, '#6e726c');
+    label('light', 646, r1, 84);
+    label(`${fmtEV(photons)} stops`, 646, r2, 84, '#6e726c');
+    label(`×${g % 1 ? g.toFixed(2) : g} gain`, 770, r1, 110, '#a86b16', fs, '600');
+    label('signal + noise', 770, r2, 110, '#6e726c');
+    label(`${fmtEV(runtime.diff)} EV`, 912, r1, 150);
+    label('vs correct exposure', 912, r2, 150, '#6e726c');
+  }
+};
+
+/* =====================================================================
+   18. CONTEXTUAL EXPLANATIONS — computed from the actual before/after state
+   ===================================================================== */
+const Explain = {
+  snapshot() { const c = state.camera; return { N: c.N, t: c.t, ISO: c.ISO, f: c.focalLength, diff: runtime.diff, sun: state.env.sunBrightness, sceneEV: runtime.sceneEV100, speed: getObj('car').speed }; },
+  /** Show one short explanation in the live view for ~5 s; a new one replaces the old one. */
+  set(html) {
+    $('whatText').innerHTML = html; $('whatPopup').hidden = false;
+    clearTimeout(this.timer); this.timer = setTimeout(() => { $('whatPopup').hidden = true; }, 5500);
+  },
+  brightness(b) { const d = runtime.diff - b.diff; return Math.abs(d) < 0.05 ? '' : ` The photo is now <b>${Math.abs(d).toFixed(1)} stops ${d > 0 ? 'brighter' : 'darker'}</b>.`; },
+  sharpZone() { const c = state.camera, z = Optics.dofLimits(c.focalLength, c.N, c.focusTarget); return `Sharp zone: ${fmtDist(z.nearM)} – ${fmtDist(z.farM)}.`; },
+  /** Length (px) of the car's motion streak for exposure time t: image speed × time. */
+  streak(t) { const car = getObj('car'); return Optics.motionStreakPx(Optics.imageSpeedPx(effectiveSpeed(car), car.z, state.camera.focalLength, App.live.W), t); },
+  aperture(b) {
+    const c = state.camera, wider = c.N < b.N;
+    this.set(`You ${wider ? 'opened' : 'closed down'} the aperture (${apertureLabel(b.N)} → ${apertureLabel(c.N)}): ${Math.abs(2 * log2(b.N / c.N)).toFixed(1)} stops ${wider ? 'more' : 'less'} light and a ${wider ? 'shallower' : 'deeper'} depth of field.${this.brightness(b)} ${this.sharpZone()}`);
+  },
+  shutter(b) {
+    const c = state.camera, s = this.streak(c.t);
+    this.set(`The shutter now stays open ${c.t > b.t ? (c.t / b.t).toFixed(1) + '× longer' : (b.t / c.t).toFixed(1) + '× shorter'} (${shutterLabel(c.t)}).${this.brightness(b)} ${s > 0 ? `The moving car smears ${s.toFixed(1)} px across the image (was ${this.streak(b.t).toFixed(1)} px).` : 'Nothing is moving, so there is no motion blur.'}`);
+  },
+  iso(b) { this.set(`ISO ${b.ISO} → ${state.camera.ISO}: the sensor signal is amplified ${fmtEV(log2(state.camera.ISO / b.ISO))} stops.${this.brightness(b)} No extra light was collected, so the photon noise is amplified too — look in the shadows.`); },
+  focal(b) {
+    const c = state.camera, k = c.focalLength / b.f;
+    this.set(`${b.f} → ${c.focalLength} mm: the view is now ${(Optics.horizontalFov(c.focalLength) / DEG).toFixed(0)}° wide and everything appears ${k.toFixed(2)}× ${k > 1 ? 'larger' : 'smaller'}. The camera did not move, so the perspective is unchanged.`);
+  },
+  focus() { this.set(`Focused on ${state.camera.focusLabel} at ${fmtDist(state.camera.focusTarget)}. Points at that distance are sharp; nearer and farther ones spread into blur discs. ${this.sharpZone()}`); },
+  focusDist() { this.focus(); },
+  env(b) {
+    this.set(`Sun ${Math.round(b.sun * 100)} % → ${Math.round(state.env.sunBrightness * 100)} %: the scene light changed by ${fmtEV(runtime.sceneEV100 - b.sceneEV)} stops.${this.brightness(b)} With manual exposure nothing compensates — rebalance with aperture, shutter or ISO.`);
+  },
+  speed(b) {
+    const v = getObj('car').speed;
+    this.set(`Car speed ${Math.round(b.speed * 3.6)} → ${Math.round(v * 3.6)} km/h. ${v > 0 ? `At ${shutterLabel(state.camera.t)} the car smears ${this.streak(state.camera.t).toFixed(1)} px: streak = image speed × exposure time.` : 'The car has stopped, so it no longer blurs.'}`);
+  },
+  moved(o, fromZ, toZ, fromRoad) {
+    const c = state.camera, k = fromZ / toZ, name = o.name.toLowerCase();
+    if (Math.abs(k - 1) < 0.02) { this.set(`You moved the ${name} sideways; its distance — and so its size and focus — did not change.`); return; }
+    const blur = Optics.mmToPixels(Optics.cocMm(c.focalLength, c.N, toZ, c.focusDistance), App.live.W);
+    this.set(`The ${name} moved${o.vehicle ? ` from ${ROADS[fromRoad].name} to ${ROADS[o.roadIndex].name}` : ''}: ${fmtDist(fromZ)} → ${fmtDist(toZ)}. It appears ${k.toFixed(2)}× ${k > 1 ? 'larger' : 'smaller'} (size ∝ 1 / distance). Focus is still at ${fmtDist(c.focusDistance)}, so its blur disc is now ${blur.toFixed(1)} px.`);
+  }
+};
+
+/* =====================================================================
+   19. PHOTO CAPTURE — renders a fresh, overlay-free frame from the live state
+   ===================================================================== */
+const Capture = {
+  R: null, busy: false,
+  async shoot(tag) {
+    if (this.busy) return; this.busy = true;
+    const fl = $('flash'); fl.classList.remove('go'); void fl.offsetWidth; fl.classList.add('go');
+    try {
+      this.R = this.R || new Renderer(1260, 840, { maxSamples: 24 });
+      const res = this.R.render();
+      const meta = this.meta(res);
+      const blob = await new Promise((ok, no) => this.R.out.toBlob(b => b ? ok(b) : no(new Error('Encoding failed')), 'image/png'));
+      const th = makeCanvas(300, 200); th.getContext('2d').drawImage(this.R.out, 0, 0, 300, 200);
+      const thumb = await new Promise(ok => th.toBlob(b => ok(b), 'image/jpeg', 0.85));
+      const item = Gallery.add(blob, thumb, meta, tag);
+      UI.note(`Photo ${item.meta.filename} added to the gallery.`);
+    } catch (e) { console.error(e); UI.note('Could not capture the photo: ' + e.message); }
+    finally { this.busy = false; }
+  },
+  /** Short id of the scene (light, car, subject positions): the comparison warns when two photos' scenes differ. */
+  sceneSignature() {
+    const car = getObj('car'), parts = [state.env.sunBrightness.toFixed(2), car.speed.toFixed(2), car.roadIndex,
+      ...['person', 'sunflower'].map(id => getObj(id).x.toFixed(1) + ',' + getObj(id).z.toFixed(1))];
+    let h = 2166136261; for (const ch of parts.join('|')) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619) >>> 0; }
+    return h.toString(16).toUpperCase().slice(0, 6);
+  },
+  meta(res) {
+    const c = state.camera, now = new Date(), car = getObj('car');
+    const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const seq = Gallery.items.filter(i => i.meta.date === date).reduce((m, i) => Math.max(m, i.meta.seq || 0), 0) + 1;
+    return {
+      date, seq, filename: `camera-lab-${date}-${String(seq).padStart(3, '0')}.png`, timestamp: now.toISOString(),
+      focalLength: c.focalLength, N: c.N, t: c.t, ISO: c.ISO,
+      sceneEV100: runtime.sceneEV100, camEV100: runtime.camEV100, meter: runtime.diff,
+      focusDistance: c.focusDistance, focusLabel: c.focusLabel,
+      sun: state.env.sunBrightness, carSpeed: effectiveSpeed(car), sceneSig: this.sceneSignature(),
+      sceneSummary: `car ${ROADS[car.roadIndex].name} (${car.z.toFixed(1)} m), person ${getObj('person').z.toFixed(1)} m, sunflower ${getObj('sunflower').z.toFixed(1)} m`,
+      clipHi: res.stats.clipHi, clipLo: res.stats.clipLo, width: this.R.W, height: this.R.H
+    };
+  }
+};
+
+/* =====================================================================
+   20. UI BINDING — every control writes to `state`; `UI.sync` reads it back
+   ===================================================================== */
+/** Short guidance shown beside a control on hover or keyboard focus (one shared panel). */
+const HINTS = {
+  experiments: '<b>Point &amp; Shoot</b> Each one resets the scene, then sets up the camera and scene to show one idea. Everything is still computed live.',
+  focal: '<b>Focal length</b> Higher focal lengths magnify the scene and narrow the field of view (angle = 2·atan(36 mm ÷ 2f)). The camera does not move, so the perspective stays the same.',
+  aperture: '<b>Aperture</b> A lower f-number is a wider opening (diameter = f ÷ N). More light reaches the sensor (light ∝ 1/N²) and the depth of field becomes shallower.<figure><canvas id="irisCanvas" width="128" height="128" aria-hidden="true"></canvas><figcaption id="irisCap"></figcaption></figure>',
+  shutter: '<b>Shutter speed</b> How long the sensor collects light. Fast speeds freeze movement but collect less light; slow speeds collect more and blur moving subjects (streak = image speed × exposure time).',
+  iso: '<b>ISO</b> Amplifies the recorded sensor signal (gain = ISO ÷ 100). The photo gets brighter, but no extra light is collected, so the photon noise is amplified too — mostly in the shadows.',
+  focus: '<b>Focus distance</b> The distance that appears sharpest. Click anything in the live view — a subject, a tree, the ground or the sky — to focus at its distance, or drag this slider.',
+  meter: '<b>Exposure meter</b> Compares the light in the scene with the light your aperture, shutter and ISO will record. 0 EV is a correct exposure; each +1 EV (one stop) is twice as bright.',
+  sun: '<b>Environment brightness</b> The strength of the sunlight, from dusk (EV 7) to full sun (EV 15). Every stop less halves the light reaching the sensor, so the photo darkens until you rebalance the exposure.',
+  speed: '<b>Car speed</b> The car\'s real speed. Its motion blur = image speed × exposure time; image speed grows with focal length and shrinks with distance. Drag the car to the other road on the Scene map.'
+};
+const Hint = {
+  init() {
+    document.querySelectorAll('[data-hint]').forEach(el => {
+      el.addEventListener('mouseenter', () => this.show(el));
+      el.addEventListener('focusin', () => this.show(el));
+      el.addEventListener('focusout', () => this.hide());
+      // while a slider is being dragged the hint stays until the mouse button is released
+      el.addEventListener('mouseleave', e => e.buttons ? addEventListener('pointerup', () => this.hide(), { once: true }) : this.hide());
+    });
+  },
+  show(el) {
+    clearTimeout(this.timer);
+    this.timer = setTimeout(() => {
+      const h = $('hint'), r = el.getBoundingClientRect();
+      if (this.key !== el.dataset.hint) { this.key = el.dataset.hint; h.innerHTML = HINTS[this.key]; UI.drawIris(true); }
+      h.hidden = false;                                   // fixed position: never clipped by the scrolling sidebar
+      h.style.left = Math.max(8, r.left - h.offsetWidth - 12) + 'px';
+      h.style.top = clamp(r.top, 8, innerHeight - h.offsetHeight - 8) + 'px';
+    }, 250);
+  },
+  hide() { clearTimeout(this.timer); this.timer = setTimeout(() => { $('hint').hidden = true; }, 150); }
+};
+
+const UI = {
+  last: new Map(),
+  setText(el, txt) { if (this.last.get(el) !== txt) { this.last.set(el, txt); el.textContent = txt; } },
+  note(msg) {
+    const t = $('toast'); t.textContent = msg; t.classList.add('show');
+    clearTimeout(this._nt); this._nt = setTimeout(() => t.classList.remove('show'), 3200);
+  },
+  /** Any change to the simulation: recompute the meter, redraw, refresh the controls. */
+  changed() { updateExposure(); App.dirty = true; this.sync(true); },
+  /** Slider binding: the state follows every input; the explanation appears once, when the slider is released. */
+  bindSlider(id, kind, apply) {
+    const el = $(id);
+    el.addEventListener('input', () => { if (!el._before) el._before = Explain.snapshot(); apply(+el.value); this.changed(); });
+    el.addEventListener('change', () => { if (el._before) Explain[kind](el._before); el._before = null; });
+  },
+  init() {
+    $('aperture').max = APERTURES.length - 1; $('shutter').max = SHUTTERS.length - 1; $('iso').max = ISOS.length - 1;
+    this.bindSlider('focal', 'focal', v => { state.camera.focalLength = v; if (state.camera.focusMark && !state.camera.focusMark.id) state.camera.focusMark = null; });
+    this.bindSlider('aperture', 'aperture', v => { state.camera.N = APERTURES[v]; });
+    this.bindSlider('shutter', 'shutter', v => { state.camera.t = SHUTTERS[v].t; });
+    this.bindSlider('iso', 'iso', v => { state.camera.ISO = ISOS[v]; });
+    this.bindSlider('focusDist', 'focusDist', v => { const d = sliderToFocus(v); Object.assign(state.camera, { focusTarget: d, focusDistance: d, focusLabel: 'a distance you set', focusMark: null }); });
+    this.bindSlider('sun', 'env', v => { state.env.sunBrightness = v / 100; });
+    this.bindSlider('carSpeed', 'speed', v => { getObj('car').speed = v / 3.6; });            // slider in km/h, physics in m/s
+    $('presetGrid').innerHTML = Object.entries(PRESETS).map(([k, p]) => `<button data-preset="${k}">${p.label}<small>${p.sub}</small></button>`).join('');
+    $('presetGrid').addEventListener('click', e => {
+      const b = e.target.closest('button'); if (!b) return;
+      applyPreset(b.dataset.preset); this.changed(); Explain.set(`<b>${PRESETS[b.dataset.preset].label}.</b> ${PRESETS[b.dataset.preset].explain}`);
+    });
+    $('tabVF').onclick = () => this.setView('viewfinder');
+    $('tabED').onclick = () => this.setView('editor');
+    $('whatClose').onclick = () => { $('whatPopup').hidden = true; };
+    $('shutterBtn').onclick = () => Capture.shoot();
+    $('shootA').onclick = () => Capture.shoot('A');
+    $('shootB').onclick = () => Capture.shoot('B');
+    $('compareAB').onclick = () => Gallery.compareAB();
+    $('galleryBtn').onclick = () => Gallery.open();
+    $('resetScene').onclick = () => { applyPreset('everyday'); this.changed(); Explain.set('Scene, camera and lighting were restored to the defaults. Your photos were kept.'); };
+    $('galClose').onclick = () => closeOverlay('galleryOverlay');
+    $('galClear').onclick = () => confirmBox(`Delete all ${Gallery.items.length} photos? This cannot be undone.`, () => { Gallery.clear(); UI.note('Gallery cleared.'); });
+    $('cmpClose').onclick = () => { $('compareView').hidden = true; };
+    $('confirmNo').onclick = () => closeOverlay('confirmOverlay');
+    document.querySelectorAll('.overlay').forEach(o => o.addEventListener('click', e => { if (e.target === o && o.id !== 'confirmOverlay') closeOverlay(o.id); }));
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') document.querySelectorAll('.overlay:not([hidden])').forEach(o => closeOverlay(o.id)); });
+    // meter scale: −3 … +3 EV, zero (a correct exposure) is the fixed target
+    $('meter').innerHTML = [-3, -2, -1, 0, 1, 2, 3].map(k => `<i class="${k ? '' : 'zero'}" style="left:${(k + 3) / 6 * 100}%"></i><span style="left:${(k + 3) / 6 * 100}%">${k > 0 ? '+' + k : k}</span>`).join('') + '<b id="meterNeedle"></b>';
+    Hint.init();
+    this.setView('viewfinder');
+  },
+  setView(v) {
+    state.ui.activeView = v;
+    const ed = v === 'editor';
+    $('vfCanvas').hidden = $('recDot').hidden = ed; $('edCanvas').hidden = !ed; $('editorPanel').hidden = !ed; $('camInfo').hidden = ed;
+    $('tabVF').setAttribute('aria-selected', !ed); $('tabED').setAttribute('aria-selected', ed);
+    requestAnimationFrame(() => { VF.resize(); ED.resize(); App.dirty = true; });
+    if (ed) this.syncEditor();
+  },
+  /** Read-only description of the object selected on the scene map. */
+  syncEditor() {
+    const o = getObj(ED.selId), c = state.camera, z = o.zTarget !== undefined ? o.zTarget : o.z;
+    const blur = Optics.mmToPixels(Optics.cocMm(c.focalLength, c.N, z, c.focusDistance), App.live.W);
+    $('editorPanel').innerHTML = `<b>${o.name}</b> · distance <b>${fmtDist(z)}</b>${o.vehicle ? ` · ${ROADS[o.roadIndex].name}` : ''} · ${ED.inCone(o) ? 'inside the view cone' : '<b>outside the view cone</b>'} · blur disc ${blur.toFixed(1)} px · drag it on the map to move it.`;
+  },
+  /** Read the authoritative state back into every control and read-out. */
+  sync(force) {
+    const now = performance.now();
+    if (!force && now - (this._ls || 0) < 90) return; this._ls = now;
+    const c = state.camera, kmh = Math.round(getObj('car').speed * 3.6);
+    const slider = (id, v) => { const el = $(id); if (+el.value !== v) el.value = v; el.style.setProperty('--fill', (v - el.min) / (el.max - el.min) * 100 + '%'); };
+    slider('focal', c.focalLength); slider('aperture', APERTURES.indexOf(c.N)); slider('shutter', SHUTTERS.findIndex(s => s.t === c.t));
+    slider('iso', ISOS.indexOf(c.ISO)); slider('focusDist', focusToSlider(c.focusTarget));
+    slider('sun', Math.round(state.env.sunBrightness * 100)); slider('carSpeed', kmh);
+    const ev = `${fmtEV(runtime.diff)} EV`, cls = runtime.diff > 1 ? 'over' : runtime.diff < -1 ? 'under' : '';
+    for (const [ids, txt] of [[['focalVal', 'ciFocal'], `${c.focalLength} mm`], [['apVal', 'ciAp'], apertureLabel(c.N)], [['shVal', 'ciSh'], shutterLabel(c.t)],
+      [['isoVal', 'ciIso'], `ISO ${c.ISO}`], [['focusVal', 'ciFocus'], fmtDist(c.focusTarget)], [['meterVal', 'ciEv'], ev],
+      [['sunVal'], Math.round(state.env.sunBrightness * 100) + ' %'], [['carSpeedVal'], `${kmh} km/h`], [['sbMotion'], kmh ? `Car ${kmh} km/h` : 'Car stopped']])
+      for (const id of ids) this.setText($(id), txt);
+    $('meterVal').className = $('ciEv').className = 'value ' + cls;
+    $('meterNeedle').style.left = (clamp(runtime.diff, -3.2, 3.2) + 3) / 6 * 100 + '%'; $('meterNeedle').className = cls;
+    const d = runtime.diff;
+    this.setText($('meterText'), Math.abs(d) <= 0.34 ? 'Balanced exposure' : d > 1 ? 'Overexposed — record less light' : d < -1 ? 'Underexposed — record more light' : `Slightly ${d > 0 ? 'bright' : 'dark'}`);
+    [...$('presetGrid').children].forEach(b => b.classList.toggle('active', b.dataset.preset === state.ui.preset));
+    $('compareAB').disabled = !(Gallery.ab.A && Gallery.ab.B);
+    if (state.ui.activeView === 'editor') this.syncEditor();
+    if (!$('hint').hidden) this.drawIris();
+  },
+  /** Iris diagram inside the aperture hint: the opening at the current f-number vs f/1.4 (dashed). */
+  drawIris(force) {
+    const cv = $('irisCanvas'), N = state.camera.N; if (!cv || (!force && this._irisN === N)) return; this._irisN = N;
+    const x = cv.getContext('2d'), R = 60, r = R * 1.4 / N * 0.92;        // opening diameter ∝ 1/N
+    $('irisCap').textContent = `Light: opening at ${apertureLabel(N)}. Dashed: f/1.4 (${(N / 1.4).toFixed(1)}× wider, ${Math.round((N / 1.4) ** 2)}× the light).`;
+    x.clearRect(0, 0, 128, 128); x.save(); x.translate(64, 64);
+    x.fillStyle = '#d8d2c7'; x.beginPath(); x.arc(0, 0, R, 0, Math.PI * 2); x.fill();
+    x.fillStyle = '#fffaf0'; x.beginPath();
+    for (let i = 0; i < 7; i++) { const a = i / 7 * Math.PI * 2 - Math.PI / 2; x.lineTo(Math.cos(a) * r, Math.sin(a) * r); }
+    x.fill();
+    x.strokeStyle = 'rgba(168,107,22,.8)'; x.setLineDash([4, 3]); x.lineWidth = 1.5; x.beginPath(); x.arc(0, 0, R * 0.92, 0, Math.PI * 2); x.stroke(); x.restore();
+  }
+};
+function focusToSlider(d) { return clamp(Math.round(1000 * Math.log(d / MIN_FOCUS) / Math.log(INFINITY_FOCUS / MIN_FOCUS)), 0, 1000); }
+function sliderToFocus(v) { return MIN_FOCUS * Math.pow(INFINITY_FOCUS / MIN_FOCUS, v / 1000); }
+function openOverlay(id) { const o = $(id); o.hidden = false; o._prevFocus = document.activeElement; const f = o.querySelector('button'); if (f) f.focus(); }
+function closeOverlay(id) { const o = $(id); if (o.hidden) return; o.hidden = true; if (id === 'galleryOverlay') Gallery.onClose(); if (o._prevFocus && o._prevFocus.focus) o._prevFocus.focus(); }
+function confirmBox(text, onYes) {
+  $('confirmText').textContent = text; openOverlay('confirmOverlay'); $('confirmNo').focus();
+  $('confirmYes').onclick = () => { closeOverlay('confirmOverlay'); onYes(); };
+}
+
+/* =====================================================================
+   21. GALLERY — photos are kept in memory for this browser session only
+   ===================================================================== */
+const Gallery = {
+  items: [], selId: null, ab: { A: null, B: null }, thumbUrls: new Map(), fullUrls: new Map(),
+  add(blob, thumb, meta, tag) {
+    const item = { id: 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), blob, thumb, meta };
+    this.items.push(item);
+    if (tag) { this.ab[tag] = item.id; item.meta.tag = tag; }
+    this.refreshButton(); UI.sync(true);
+    if (!$('galleryOverlay').hidden) this.render();
+    return item;
+  },
+  remove(id) {
+    this.items = this.items.filter(x => x.id !== id); this.revoke(id);
+    for (const k of ['A', 'B']) if (this.ab[k] === id) this.ab[k] = null;
+    if (this.selId === id) this.selId = null;
+    this.refreshButton(); this.render(); UI.sync(true);
+  },
+  clear() {
+    for (const it of this.items) this.revoke(it.id);
+    this.items = []; this.selId = null; this.ab = { A: null, B: null }; $('compareView').hidden = true;
+    this.refreshButton(); this.render(); UI.sync(true);
+  },
+  revoke(id) { for (const map of [this.thumbUrls, this.fullUrls]) if (map.has(id)) { URL.revokeObjectURL(map.get(id)); map.delete(id); } },
+  url(map, id, blob) { if (!map.has(id)) map.set(id, URL.createObjectURL(blob)); return map.get(id); },
+  thumbUrl(it) { return this.url(this.thumbUrls, it.id, it.thumb); },
+  fullUrl(it) { return this.url(this.fullUrls, it.id, it.blob); },
+  refreshButton() {
+    $('galCount').textContent = this.items.length;
+    const last = this.items[this.items.length - 1];
+    $('galThumb').style.backgroundImage = last ? `url(${this.thumbUrl(last)})` : '';
+  },
+  open() {
+    openOverlay('galleryOverlay');
+    if (!this.selId && this.items.length) this.selId = this.items[this.items.length - 1].id;
+    this.render();
+  },
+  onClose() { for (const u of this.fullUrls.values()) URL.revokeObjectURL(u); this.fullUrls.clear(); },
+  render() {
+    $('galNote').textContent = 'Photos are kept for this session only — download any you want to keep.' + (this.items.length ? '' : ' No photos yet — press the shutter button.');
+    $('galClear').disabled = !this.items.length;
+    $('thumbs').innerHTML = '';
+    [...this.items].reverse().forEach(it => {
+      const b = document.createElement('button'); b.className = 'thumb-card' + (it.id === this.selId ? ' selected' : '');
+      b.setAttribute('aria-label', `Photo ${it.meta.filename}`);
+      const tag = it.id === this.ab.A ? 'A' : it.id === this.ab.B ? 'B' : '';
+      b.innerHTML = `<img alt="" src="${this.thumbUrl(it)}">${tag ? `<span class="ab-mark">${tag}</span>` : ''}<div class="cap">${apertureLabel(it.meta.N)} · ${shutterLabel(it.meta.t)} · ISO ${it.meta.ISO}<br>${it.meta.focalLength} mm · ${it.meta.timestamp.slice(11, 19)}</div>`;
+      b.onclick = () => { this.selId = it.id; this.render(); };
+      $('thumbs').appendChild(b);
+    });
+    const it = this.items.find(i => i.id === this.selId);
+    $('preview').hidden = !it;
+    if (!it) return;
+    $('prevImg').src = this.fullUrl(it);
+    $('prevMeta').innerHTML = this.metaRows(it.meta).map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`).join('');
+    $('prevDownload').onclick = () => this.download(it);
+    $('prevDelete').onclick = () => { this.remove(it.id); UI.note('Photo deleted.'); };
+  },
+  download(it) {
+    const a = document.createElement('a'); a.href = this.fullUrl(it); a.download = it.meta.filename;
+    document.body.appendChild(a); a.click(); a.remove();
+  },
+  metaRows(m) {
+    return [
+      ['File', m.filename], ['Captured', new Date(m.timestamp).toLocaleString()],
+      ['Focal length', m.focalLength + ' mm'], ['Aperture', apertureLabel(m.N)], ['Shutter', shutterLabel(m.t)], ['ISO', m.ISO],
+      ['Exposure (vs correct)', fmtEV(m.meter) + ' EV'], ['Scene / camera EV100', m.sceneEV100.toFixed(1) + ' / ' + m.camEV100.toFixed(1)],
+      ['Focus', `${fmtDist(m.focusDistance)} · ${m.focusLabel}`],
+      ['Lighting', `sun ${Math.round(m.sun * 100)} %`], ['Car speed', `${Math.round(m.carSpeed * 3.6)} km/h`],
+      ['Scene', `${m.sceneSummary} · id ${m.sceneSig}`], ['Clipping', `${(m.clipHi * 100).toFixed(1)} % highlights · ${(m.clipLo * 100).toFixed(1)} % shadows`],
+      ['Resolution', `${m.width} × ${m.height}`]
+    ];
+  },
+  /** Shoot A / Shoot B → side-by-side comparison with a table and an interpretation. */
+  compareAB() {
+    const A = this.items.find(i => i.id === this.ab.A), B = this.items.find(i => i.id === this.ab.B); if (!A || !B) return;
+    if ($('galleryOverlay').hidden) openOverlay('galleryOverlay');
+    this.selId = B.id; this.render();
+    const a = A.meta, b = B.meta;
+    $('compareView').hidden = false;
+    $('cmpImgs').innerHTML = `<figure><img src="${this.fullUrl(A)}" alt="Photo A"><figcaption><b>A</b> · ${a.filename}</figcaption></figure><figure><img src="${this.fullUrl(B)}" alt="Photo B"><figcaption><b>B</b> · ${b.filename}</figcaption></figure>`;
+    const rows = [
+      ['Focal length', a.focalLength + ' mm', b.focalLength + ' mm'], ['Aperture', apertureLabel(a.N), apertureLabel(b.N)],
+      ['Shutter', shutterLabel(a.t), shutterLabel(b.t)], ['ISO', a.ISO, b.ISO],
+      ['Exposure', fmtEV(a.meter) + ' EV', fmtEV(b.meter) + ' EV'], ['Focus', `${fmtDist(a.focusDistance)} · ${a.focusLabel}`, `${fmtDist(b.focusDistance)} · ${b.focusLabel}`],
+      ['Lighting', `sun ${Math.round(a.sun * 100)} %`, `sun ${Math.round(b.sun * 100)} %`],
+      ['Car speed', Math.round(a.carSpeed * 3.6) + ' km/h', Math.round(b.carSpeed * 3.6) + ' km/h'], ['Scene id', a.sceneSig, b.sceneSig]
+    ];
+    $('cmpTable').innerHTML = '<tr><th>Setting</th><th>Photo A</th><th>Photo B</th></tr>' +
+      rows.map(([k, x, y]) => `<tr class="${String(x) !== String(y) ? 'diff' : ''}"><td>${k}</td><td>${x}</td><td>${y}</td></tr>`).join('');
+    $('cmpInterp').innerHTML = '<b>What the recorded settings predict</b><ul>' + this.interpret(a, b).map(t => `<li>${t}</li>`).join('') + '</ul>';
+    $('compareView').scrollIntoView({ block: 'start', behavior: 'smooth' });
+  },
+  /** Interpretation generated only from the recorded settings (never invented). */
+  interpret(a, b) {
+    const out = [];
+    if (a.N !== b.N) {
+      const w = a.N < b.N ? 'A' : 'B', n = a.N < b.N ? 'B' : 'A', st = Math.abs(2 * log2(a.N / b.N));
+      out.push(`Photo ${w} uses a wider aperture (${apertureLabel(Math.min(a.N, b.N))} vs ${apertureLabel(Math.max(a.N, b.N))}): ${st.toFixed(1)} stops more light through the lens and a <b>shallower depth of field</b> — out-of-focus areas should be blurrier in ${w} than in ${n}.`);
+    }
+    if (a.t !== b.t) {
+      const l = a.t > b.t ? 'A' : 'B', r = Math.max(a.t, b.t) / Math.min(a.t, b.t);
+      const moving = a.carSpeed > 0 || b.carSpeed > 0;
+      out.push(`Photo ${l} used a ${r.toFixed(1)}× longer exposure (${shutterLabel(Math.max(a.t, b.t))} vs ${shutterLabel(Math.min(a.t, b.t))}): ${log2(r).toFixed(1)} stops more light collected${moving ? `, and moving subjects should streak about ${r.toFixed(1)}× longer in ${l}` : '; nothing was moving, so no extra motion blur is expected'}.`);
+    }
+    if (a.ISO !== b.ISO) {
+      const h = a.ISO > b.ISO ? 'A' : 'B';
+      out.push(`Photo ${h} used higher ISO (${Math.max(a.ISO, b.ISO)} vs ${Math.min(a.ISO, b.ISO)}): its signal was amplified ${log2(Math.max(a.ISO, b.ISO) / Math.min(a.ISO, b.ISO)).toFixed(1)} stops more. That adds brightness and <b>visible noise</b> but no extra light.`);
+    }
+    if (a.focalLength !== b.focalLength) {
+      const lg = a.focalLength > b.focalLength ? 'A' : 'B', k = Math.max(a.focalLength, b.focalLength) / Math.min(a.focalLength, b.focalLength);
+      out.push(`Photo ${lg} used a longer focal length: subjects are ${k.toFixed(2)}× larger and the view is narrower. Perspective between subjects is identical because the camera did not move.`);
+    }
+    if (Math.abs(a.focusDistance - b.focusDistance) > 0.05 * Math.min(a.focusDistance, b.focusDistance))
+      out.push(`The focus plane moved from ${fmtDist(a.focusDistance)} (A) to ${fmtDist(b.focusDistance)} (B), so different subjects are sharp.`);
+    const dm = b.meter - a.meter;
+    if (Math.abs(dm) >= 0.15) out.push(`Overall, Photo ${dm > 0 ? 'B' : 'A'} should be about <b>${Math.abs(dm).toFixed(1)} stops brighter</b> (meter A ${fmtEV(a.meter)}, B ${fmtEV(b.meter)}).`);
+    else out.push(`Both photos should have the same overall brightness (meter A ${fmtEV(a.meter)}, B ${fmtEV(b.meter)})${a.N !== b.N || a.t !== b.t || a.ISO !== b.ISO ? ' — the settings changed in ways that cancel out in exposure' : ''}.`);
+    if (a.sceneSig !== b.sceneSig) out.push(`<span class="scene-warn">⚠ The scene itself differs (lighting, car speed or object positions — ids ${a.sceneSig} vs ${b.sceneSig}). Not every difference is caused by the camera settings.</span>`);
+    if (a.carSpeed > 0 || b.carSpeed > 0) out.push('The car was captured at different points along the road, so its position differs between the frames.');
+    if (out.length === 1 && a.N === b.N && a.t === b.t && a.ISO === b.ISO && a.focalLength === b.focalLength) out.unshift('The camera settings are identical.');
+    return out;
+  }
+};
+/* =====================================================================
+   22. APPLICATION LOOP — always the full-quality renderer
+   ===================================================================== */
+const App = {
+  live: null, dirty: true, last: 0, lastRender: 0, frames: 0, fpsT: 0, lastStats: null,
+  init() {
+    this.live = new Renderer(840, 560, { maxSamples: 16 });
+    applyPreset('everyday');
+    updateExposure();
+    VF.init(); ED.init(); MECH.init(); UI.init();
+    VF.resize(); ED.resize();
+    new ResizeObserver(() => { VF.resize(); ED.resize(); this.dirty = true; }).observe($('stage'));
+    document.addEventListener('visibilitychange', () => { this.last = 0; });
+    Gallery.refreshButton();
+    UI.sync(true);
+    requestAnimationFrame(t => this.frame(t));
+  },
+  frame(now) {
+    requestAnimationFrame(t => this.frame(t));
+    if (document.hidden) return;
+    const dt = this.last ? Math.min(0.1, (now - this.last) / 1000) : 1 / 60; this.last = now;
+    try {
+      updateWorld(dt); AF.update(dt); updateExposure();
+      const cam = state.camera, view = state.ui.activeView, insideOpen = $('insideCam').open;
+      const moving = anythingMoving() || state.objects.some(o => o.zTarget !== undefined || o.dragging);
+      const focusMoving = Math.abs(1 / cam.focusDistance - 1 / cam.focusTarget) > 1e-5;
+      const noisy = this.lastStats && this.lastStats.noise;
+      const interval = view === 'viewfinder' ? 0 : 90;      // the scene map only needs occasional viewfinder updates
+      const need = this.dirty || moving || focusMoving || (noisy && now - this.lastRender > 66);
+      if ((view === 'viewfinder' || insideOpen || this.dirty) && need && now - this.lastRender >= interval) {
+        const res = this.live.render();
+        runtime.clip = { hi: res.stats.clipHi, lo: res.stats.clipLo }; runtime.visible = res.visible;
+        this.lastStats = res.stats; this.lastRender = now; this.dirty = false;
+      }
+      if (view === 'viewfinder') VF.draw(); else ED.draw();
+      if (insideOpen) MECH.draw();
+      UI.sync(false);
+    } catch (e) {
+      console.error('Frame error', e);
+      if (!this._errShown) { this._errShown = true; UI.note('A rendering error occurred; the simulation will keep trying. Details are in the console.'); }
+    }
+    this.frames++;
+    if (now - this.fpsT > 1000) { $('fpsPill').textContent = `${Math.round(this.frames * 1000 / (now - this.fpsT))} fps`; this.frames = 0; this.fpsT = now; }
+  }
+};
+window.addEventListener('DOMContentLoaded', () => App.init());
+
+</script>
+</body>
+</html>
